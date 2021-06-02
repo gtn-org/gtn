@@ -141,6 +141,23 @@ Run a simple example:
 python bindings/python/examples/simple_graph.py
 ```
 
+
+### Citing this Repository
+
+If you use the code in this repository, please cite:
+
+Awni Hannun, Vineel Pratap, Jacob Kahn and Wei-Ning Hsu. Differentiable Weighted Finite-State Transducers. 
+[arXiv 2010.01003](https://arxiv.org/abs/2010.01003), 2020.
+
+```
+@article{hannun2020dwfst,
+  title={Differentiable Weighted Finite-State Transducers},
+  author={Hannun, Awni and Pratap, Vineel and Kahn, Jacob and Hsu, Wei-Ning},
+  journal={arXiv preprint arXiv:2010.01003},
+  year={2020}
+}
+```
+
 ### License
 
 GTN is licensed under a MIT license. See [LICENSE](LICENSE).
