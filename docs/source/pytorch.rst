@@ -117,5 +117,5 @@ each ``loss`` graph and accumulating the gradients into a
         # Compute gradients in parallel over the batch:
         gtn.parallel_for(backward_single, range(B))
 
-        return input_grad.to(grad_output.device), None
+        return grad_output.unsqueeze(1).unsqueeze(1) * input_grad.to(grad_output.device), None
 
