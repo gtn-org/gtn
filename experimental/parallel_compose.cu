@@ -142,26 +142,40 @@ nodeAndArcPairGPU computeNodeAndArcPair(
   assert(numArcCrossProductOffset >= 2);
   const size_t numIntervals = numArcCrossProductOffset - 1;
 
-  for (size_t i = 0; i < numIntervals; ++i) {
-    const int lVal = arcCrossProductOffset[i];
-    const int rVal = arcCrossProductOffset[i + 1];
+  // Binary search
+  {
+    size_t lIdx = 0;
+    size_t rIdx = numIntervals - 1;
 
-    if ((lVal <= tid) && (tid < rVal)) {
-      intervalIdx = i;
-      result.isValid = true;
-      result.nodePair = make_int2(
-          toExploreNodePairFirst[intervalIdx], toExploreNodePairSecond[intervalIdx]);
+    while (lIdx <= rIdx) {
+      intervalIdx = (lIdx + rIdx) / 2;
+      const int lVal = arcCrossProductOffset[intervalIdx];
+      const int rVal = arcCrossProductOffset[intervalIdx + 1];
 
-      // The range of idx is from
-      // [0, toExploreNumArcsFirst[intervalIdx] * toExploreNumArcsSecond[intervalIdx])
-      localIdx = tid - lVal;
-      numArcs = rVal - lVal;
+      if (tid >= rVal) {
+        lIdx = intervalIdx + 1;
+      } else if (tid < lVal) {
+        assert(intervalIdx >= 1);
+        rIdx = intervalIdx - 1;
+      } else {
+        assert((lVal <= tid) && (tid < rVal));
 
-      break;
+        result.isValid = true;
+        result.nodePair = make_int2(
+            toExploreNodePairFirst[intervalIdx], toExploreNodePairSecond[intervalIdx]);
+
+        // The range of idx is from
+        // [0, toExploreNumArcsFirst[intervalIdx] * toExploreNumArcsSecond[intervalIdx])
+        localIdx = tid - lVal;
+        numArcs = rVal - lVal;
+
+        break;
+      }
     }
   }
 
-  // Binary instead of linear search
+  // Linear search
+  /*
   {
     nodeAndArcPairGPU result2;
     result2.checkArcPair = false;
@@ -170,22 +184,12 @@ nodeAndArcPairGPU computeNodeAndArcPair(
     int localIdx2, numArcs2;
     size_t intervalIdx2;
 
-    size_t lIdx = 0;
-    size_t rIdx = numIntervals - 1;
+    for (size_t i = 0; i < numIntervals; ++i) {
+      const int lVal = arcCrossProductOffset[i];
+      const int rVal = arcCrossProductOffset[i + 1];
 
-    while (lIdx <= rIdx) {
-      intervalIdx2 = (lIdx + rIdx) / 2;
-      const int lVal = arcCrossProductOffset[intervalIdx2];
-      const int rVal = arcCrossProductOffset[intervalIdx2 + 1];
-
-      if (tid >= rVal) {
-        lIdx = intervalIdx2 + 1;
-      } else if (tid < lVal) {
-        assert(intervalIdx2 >= 1);
-        rIdx = intervalIdx2 - 1;
-      } else {
-        assert((lVal <= tid) && (tid < rVal));
-
+      if ((lVal <= tid) && (tid < rVal)) {
+        intervalIdx2 = i;
         result2.isValid = true;
         result2.nodePair = make_int2(
             toExploreNodePairFirst[intervalIdx2], toExploreNodePairSecond[intervalIdx2]);
@@ -208,7 +212,7 @@ nodeAndArcPairGPU computeNodeAndArcPair(
       assert(numArcs == numArcs2);
       assert(intervalIdx == intervalIdx2);
     }
-  }
+  }*/
 
   if (result.isValid == true) {
 
