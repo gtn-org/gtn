@@ -140,23 +140,73 @@ nodeAndArcPairGPU computeNodeAndArcPair(
 
   // There should be at least two values to form a range
   assert(numArcCrossProductOffset >= 2);
+  const size_t numIntervals = numArcCrossProductOffset - 1;
 
-  for (size_t i = 0; i < numArcCrossProductOffset - 1; ++i) {
+  for (size_t i = 0; i < numIntervals; ++i) {
     const int lVal = arcCrossProductOffset[i];
     const int rVal = arcCrossProductOffset[i + 1];
 
     if ((lVal <= tid) && (tid < rVal)) {
+      intervalIdx = i;
       result.isValid = true;
       result.nodePair = make_int2(
-          toExploreNodePairFirst[i], toExploreNodePairSecond[i]);
+          toExploreNodePairFirst[intervalIdx], toExploreNodePairSecond[intervalIdx]);
 
       // The range of idx is from
-      // [0, toExploreNumArcsFirst[i] * toExploreNumArcsSecond[i])
+      // [0, toExploreNumArcsFirst[intervalIdx] * toExploreNumArcsSecond[intervalIdx])
       localIdx = tid - lVal;
       numArcs = rVal - lVal;
-      intervalIdx = i;
 
       break;
+    }
+  }
+
+  // Binary instead of linear search
+  {
+    nodeAndArcPairGPU result2;
+    result2.checkArcPair = false;
+    result2.checkEpsilonArcPair = make_int2(false, false);
+    result2.isValid = false;
+    int localIdx2, numArcs2;
+    size_t intervalIdx2;
+
+    size_t lIdx = 0;
+    size_t rIdx = numIntervals - 1;
+
+    while (lIdx <= rIdx) {
+      intervalIdx2 = (lIdx + rIdx) / 2;
+      const int lVal = arcCrossProductOffset[intervalIdx2];
+      const int rVal = arcCrossProductOffset[intervalIdx2 + 1];
+
+      if (tid >= rVal) {
+        lIdx = intervalIdx2 + 1;
+      } else if (tid < lVal) {
+        assert(intervalIdx2 >= 1);
+        rIdx = intervalIdx2 - 1;
+      } else {
+        assert((lVal <= tid) && (tid < rVal));
+
+        result2.isValid = true;
+        result2.nodePair = make_int2(
+            toExploreNodePairFirst[intervalIdx2], toExploreNodePairSecond[intervalIdx2]);
+
+        // The range of idx is from
+        // [0, toExploreNumArcsFirst[intervalIdx2] * toExploreNumArcsSecond[intervalIdx2])
+        localIdx2 = tid - lVal;
+        numArcs2 = rVal - lVal;
+
+        break;
+      }
+    }
+
+    assert(result.isValid == result2.isValid);
+    if (result2.isValid) {
+      assert(result.checkArcPair == result2.checkArcPair);
+      assert(result.checkEpsilonArcPair.x == result2.checkEpsilonArcPair.x);
+      assert(result.checkEpsilonArcPair.y == result2.checkEpsilonArcPair.y);
+      assert(localIdx == localIdx2);
+      assert(numArcs == numArcs2);
+      assert(intervalIdx == intervalIdx2);
     }
   }
 
