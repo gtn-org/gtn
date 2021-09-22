@@ -38,6 +38,17 @@ function(build_experimental_gpu SRCFILE)
   get_filename_component(src_name ${SRCFILE} NAME_WE)
   set(target "${src_name}_gpu")
   add_executable(${target} ${SRCFILE})
+  
+  # CUDA/nvcc setup
+  enable_language(CUDA)
+  # The CUDA standard is still C++14 to enable interopability with
+  # slightly older and still well-supported versions of CUDA/nvcc
+  # (e.g. CUDA < 11).
+  set(CMAKE_CUDA_STANDARD 14)
+  set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+  include(${CMAKE_MODULE_PATH}/CUDAUtils.cmake)
+  # set_cuda_arch_nvcc_flags()
+
   target_sources(
     ${target}
     PRIVATE
