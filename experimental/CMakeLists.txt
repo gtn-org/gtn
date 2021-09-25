@@ -1,7 +1,14 @@
-cmake_minimum_required(VERSION 3.18)
 project(gtn-experimental LANGUAGES CXX CUDA)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+message(${CMAKE_CUDA_COMPILER})
+
+# CUDA/nvcc setup
+set(CMAKE_CUDA_STANDARD 14)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+include(${CMAKE_MODULE_PATH}/CUDAUtils.cmake)
+set_cuda_arch_nvcc_flags()
+
 
 function(build_experimental SRCFILE)
   get_filename_component(src_name ${SRCFILE} NAME_WE)
@@ -38,6 +45,8 @@ function(build_experimental_gpu SRCFILE)
   get_filename_component(src_name ${SRCFILE} NAME_WE)
   set(target "${src_name}_gpu")
   add_executable(${target} ${SRCFILE})
+  
+
   target_sources(
     ${target}
     PRIVATE
