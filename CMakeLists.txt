@@ -64,7 +64,7 @@ endif()
 
 # Experimental
 if (GTN_BUILD_EXPERIMENTAL)
-  add_subdirectory(${PROJECT_SOURCE_DIR}/experimental)
+  add_subdirectory(${PROJECT_SOURCE_DIR}/gtn/experimental)
 endif()
 
 
