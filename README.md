@@ -86,7 +86,7 @@ pip install gtn
 First, clone the project:
 
 ```
-git clone git@github.com:facebookresearch/gtn.git && cd gtn
+git clone git@github.com:gtn-org/gtn.git && cd gtn
 ```
 
 Create a build directory and run CMake and make:
