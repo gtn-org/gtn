@@ -5,7 +5,7 @@
 #
 
 ### Find CUDA
-find_package(CUDA 10.2 QUIET) 
+find_package(CUDA 11.1 QUIET) 
 if (CUDA_FOUND)
   message(STATUS "CUDA found (library: ${CUDA_LIBRARIES} include: ${CUDA_INCLUDE_DIRS})")
 else()
