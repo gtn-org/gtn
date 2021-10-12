@@ -18,6 +18,7 @@ from ._utils import *
 from ._rand import *
 from ._creations import *
 from ._parallel import *
+from ._experimental import *
 
 def draw(graph, file_name, isymbols={}, osymbols={}):
     ext = os.path.splitext(file_name)[1]
