@@ -3,7 +3,7 @@
 #include <sstream>
 
 #include "gtn/gtn.h"
-#include "parallel_compose.h"
+#include "gtn/experimental/parallel_compose.h"
 
 using namespace gtn;
 

@@ -11,8 +11,8 @@
 #include <vector>
 #include <tuple>
 
-#include "parallel_compose.h"
-#include "prefix_scan.h"
+#include "gtn/experimental/parallel_compose.h"
+#include "gtn/experimental/prefix_scan.h"
 
 namespace gtn {
 namespace detail {

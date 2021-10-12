@@ -19,8 +19,8 @@
 #include <thrust/reduce.h>
 #include <thrust/scan.h>
 
-#include "parallel_compose.h"
-#include "prefix_scan.h"
+#include "gtn/experimental/parallel_compose.h"
+#include "gtn/experimental/prefix_scan.h"
 
 /// usage: `CUDA_CHECK(cudaError_t err[, const char* prefix])`
 #define CUDA_CHECK(err) \
