@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.18)
 
-project(gtn)
+project(gtn LANGUAGES CXX)
+
 
 # ----------------------------- Setup -----------------------------
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
@@ -19,6 +20,12 @@ option(GTN_BUILD_PYTHON_BINDINGS "Build python bindings for gtn" OFF)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+if (GTN_BUILD_EXPERIMENTAL)
+  enable_language(CUDA)
+  set(CMAKE_CUDA_STANDARD 14)
+  set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+endif()
+
 # ----------------------------- Lib -----------------------------
 # Core lib sources -- maybe make me a submodule eventually
 include(${CMAKE_SOURCE_DIR}/gtn/CMakeLists.txt)
@@ -28,6 +35,13 @@ add_library(
   gtn
   ${GTN_SOURCES}
 )
+
+# Experimental
+if (GTN_BUILD_EXPERIMENTAL)
+  include(${CMAKE_SOURCE_DIR}/gtn/experimental/CMakeLists.txt)
+  target_sources(gtn PRIVATE ${GTN_EXPERIMENTAL_SOURCES})
+endif()
+
 add_subdirectory(${PROJECT_SOURCE_DIR}/gtn)
 
 target_link_libraries(gtn PUBLIC ${CMAKE_THREAD_LIBS_INIT})
@@ -60,11 +74,6 @@ endif()
 # Examples
 if (GTN_BUILD_EXAMPLES)
   add_subdirectory(${PROJECT_SOURCE_DIR}/examples)
-endif()
-
-# Experimental
-if (GTN_BUILD_EXPERIMENTAL)
-  add_subdirectory(${PROJECT_SOURCE_DIR}/experimental)
 endif()
 
 

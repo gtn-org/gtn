@@ -11,19 +11,35 @@
 #include <vector>
 #include <tuple>
 #include <iostream>
+#include <sstream>
 
+#include <cuda.h>
+#include <cuda_runtime.h>
 #include <thrust/device_ptr.h>
 #include <thrust/reduce.h>
 #include <thrust/scan.h>
 
-#include "parallel_compose.h"
-#include "prefix_scan.h"
+#include "gtn/experimental/parallel_compose.h"
+#include "gtn/experimental/prefix_scan.h"
+
+/// usage: `CUDA_CHECK(cudaError_t err[, const char* prefix])`
+#define CUDA_CHECK(err) \
+  cudaCheck(err, __FILE__, __LINE__)
 
 namespace gtn {
 namespace detail {
 namespace dataparallel {
 
 namespace {
+
+void cudaCheck(cudaError_t err, const char* file, int line) {
+  if (err != cudaSuccess) {
+    std::ostringstream ess;
+    ess << '[' << file << ':' << line
+        << "] CUDA error: " << cudaGetErrorString(err);
+    throw std::runtime_error(ess.str());
+  }
+}
 
 struct GraphDataParallelGPU {
   size_t numNodes;
@@ -89,8 +105,8 @@ std::tuple<int*, size_t, int> prefixSumScanGPU(const int* input, size_t numElts,
   const size_t scanNumElts = appendSum ? numElts + 1 : numElts;
 
   int *output;
-  cudaMalloc((void **)(&(output)), sizeof(int) * scanNumElts);
-  cudaMemcpy((void *)(output), (void *)(input), sizeof(int) * numElts, cudaMemcpyDeviceToDevice);
+  CUDA_CHECK(cudaMalloc((void **)(&(output)), sizeof(int) * scanNumElts));
+  CUDA_CHECK(cudaMemcpy((void *)(output), (void *)(input), sizeof(int) * numElts, cudaMemcpyDeviceToDevice));
 
   int sum = 0;
   if (numElts > 0) {
@@ -99,14 +115,14 @@ std::tuple<int*, size_t, int> prefixSumScanGPU(const int* input, size_t numElts,
 
     int lastElementInput;
     int lastElementOutput;
-    cudaMemcpy((void *)(&lastElementInput), (void *)(&(input[numElts-1])), sizeof(int), cudaMemcpyDeviceToHost);
-    cudaMemcpy((void *)(&lastElementOutput), (void *)(&(output[numElts-1])), sizeof(int), cudaMemcpyDeviceToHost);
+    CUDA_CHECK(cudaMemcpy((void *)(&lastElementInput), (void *)(&(input[numElts-1])), sizeof(int), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy((void *)(&lastElementOutput), (void *)(&(output[numElts-1])), sizeof(int), cudaMemcpyDeviceToHost));
     sum = lastElementInput + lastElementOutput;
   }
 
   if (appendSum) {
     assert(scanNumElts > 0);
-    cudaMemcpy((void *)(&(output[scanNumElts-1])), (void *)(&sum), sizeof(int), cudaMemcpyHostToDevice);
+    CUDA_CHECK(cudaMemcpy((void *)(&(output[scanNumElts-1])), (void *)(&sum), sizeof(int), cudaMemcpyHostToDevice));
   }
 
   return std::make_tuple(output, scanNumElts, sum);
@@ -135,65 +151,126 @@ nodeAndArcPairGPU computeNodeAndArcPair(
   result.checkEpsilonArcPair = make_int2(false, false);
   result.isValid = false;
 
+  int localIdx, numArcs;
+  size_t intervalIdx;
+
   // There should be at least two values to form a range
   assert(numArcCrossProductOffset >= 2);
+  const size_t numIntervals = numArcCrossProductOffset - 1;
 
-  for (size_t i = 0; i < numArcCrossProductOffset - 1; ++i) {
-    const int lVal = arcCrossProductOffset[i];
-    const int rVal = arcCrossProductOffset[i + 1];
+  // Binary search
+  {
+    size_t lIdx = 0;
+    size_t rIdx = numIntervals - 1;
 
-    if ((lVal <= tid) && (tid < rVal)) {
-      result.isValid = true;
-      result.nodePair = make_int2(
-          toExploreNodePairFirst[i], toExploreNodePairSecond[i]);
+    while (lIdx <= rIdx) {
+      intervalIdx = (lIdx + rIdx) / 2;
+      const int lVal = arcCrossProductOffset[intervalIdx];
+      const int rVal = arcCrossProductOffset[intervalIdx + 1];
 
-      // The range of idx is from
-      // [0, toExploreNumArcsFirst[i] * toExploreNumArcsSecond[i])
-      const int idx = tid - lVal;
-      const int numArcs = rVal - lVal;
+      if (tid >= rVal) {
+        lIdx = intervalIdx + 1;
+      } else if (tid < lVal) {
+        assert(intervalIdx >= 1);
+        rIdx = intervalIdx - 1;
+      } else {
+        assert((lVal <= tid) && (tid < rVal));
 
-      assert(idx >= 0);
-      assert(idx < numArcs);
-      assert(numArcs > 0);
+        result.isValid = true;
+        result.nodePair = make_int2(
+            toExploreNodePairFirst[intervalIdx], toExploreNodePairSecond[intervalIdx]);
 
-      const int arcProd =
-          toExploreNumArcsFirst[i] * toExploreNumArcsSecond[i];
+        // The range of idx is from
+        // [0, toExploreNumArcsFirst[intervalIdx] * toExploreNumArcsSecond[intervalIdx])
+        localIdx = tid - lVal;
+        numArcs = rVal - lVal;
 
-      if (numArcs == arcProd) {
-        result.checkArcPair = true;
+        break;
+      }
+    }
+  }
 
-        // We map the tids to 2D grid where the
-        // x-axis is toExploreNumArcsFirst[i] (row)
-        // y-axis is toExploreNumArcsSecond[i] (column)
-	assert(toExploreNumArcsFirst[i] > 0);
-        result.arcPair = make_int2(
-	    idx % toExploreNumArcsFirst[i],
-	    idx / toExploreNumArcsFirst[i]);
+  // Linear search
+  /*
+  {
+    nodeAndArcPairGPU result2;
+    result2.checkArcPair = false;
+    result2.checkEpsilonArcPair = make_int2(false, false);
+    result2.isValid = false;
+    int localIdx2, numArcs2;
+    size_t intervalIdx2;
 
-        // Pick the tids from the first row since we need only one
-        // tid per arc of the node from the first graph to check for
-        // epsilon
-        if (idx < toExploreNumArcsFirst[i]) {
-          result.checkEpsilonArcPair.x = true;
-        }
+    for (size_t i = 0; i < numIntervals; ++i) {
+      const int lVal = arcCrossProductOffset[i];
+      const int rVal = arcCrossProductOffset[i + 1];
 
-        // Pick the tids from the first column since we need only one
-        // tid per arc of the node from the first graph to check for
-        // epsilon
-        if ((idx % toExploreNumArcsFirst[i]) == 0) {
-          result.checkEpsilonArcPair.y = true;
-        }
-      } else if ((arcProd == 0) && (numArcs == toExploreNumArcsFirst[i])) {
-        // TODO: Likely not the brightest idea to use -1 as sentinel
-        result.arcPair = make_int2(idx, -1);
+      if ((lVal <= tid) && (tid < rVal)) {
+        intervalIdx2 = i;
+        result2.isValid = true;
+        result2.nodePair = make_int2(
+            toExploreNodePairFirst[intervalIdx2], toExploreNodePairSecond[intervalIdx2]);
+
+        // The range of idx is from
+        // [0, toExploreNumArcsFirst[intervalIdx2] * toExploreNumArcsSecond[intervalIdx2])
+        localIdx2 = tid - lVal;
+        numArcs2 = rVal - lVal;
+
+        break;
+      }
+    }
+
+    assert(result.isValid == result2.isValid);
+    if (result2.isValid) {
+      assert(result.checkArcPair == result2.checkArcPair);
+      assert(result.checkEpsilonArcPair.x == result2.checkEpsilonArcPair.x);
+      assert(result.checkEpsilonArcPair.y == result2.checkEpsilonArcPair.y);
+      assert(localIdx == localIdx2);
+      assert(numArcs == numArcs2);
+      assert(intervalIdx == intervalIdx2);
+    }
+  }*/
+
+  if (result.isValid == true) {
+
+    assert(localIdx >= 0);
+    assert(localIdx < numArcs);
+    assert(numArcs > 0);
+
+    const int arcProd =
+        toExploreNumArcsFirst[intervalIdx] * toExploreNumArcsSecond[intervalIdx];
+
+    if (numArcs == arcProd) {
+      result.checkArcPair = true;
+
+      // We map the tids to 2D grid where the
+      // x-axis is toExploreNumArcsFirst[i] (row)
+      // y-axis is toExploreNumArcsSecond[i] (column)
+      assert(toExploreNumArcsFirst[intervalIdx] > 0);
+      result.arcPair = make_int2(
+        localIdx % toExploreNumArcsFirst[intervalIdx],
+        localIdx / toExploreNumArcsFirst[intervalIdx]);
+
+      // Pick the tids from the first row since we need only one
+      // tid per arc of the node from the first graph to check for
+      // epsilon
+      if (localIdx < toExploreNumArcsFirst[intervalIdx]) {
         result.checkEpsilonArcPair.x = true;
-      } else if ((arcProd == 0) && (numArcs == toExploreNumArcsSecond[i])) {
-        // TODO: Likely not the brightest idea to use -1 as sentinel
-        result.arcPair = make_int2(-1, idx);
-        result.checkEpsilonArcPair.y = true;
       }
 
-      break;
+      // Pick the tids from the first column since we need only one
+      // tid per arc of the node from the first graph to check for
+      // epsilon
+      if ((localIdx % toExploreNumArcsFirst[intervalIdx]) == 0) {
+        result.checkEpsilonArcPair.y = true;
+      }
+    } else if ((arcProd == 0) && (numArcs == toExploreNumArcsFirst[intervalIdx])) {
+      // TODO: Likely not the brightest idea to use -1 as sentinel
+      result.arcPair = make_int2(localIdx, -1);
+      result.checkEpsilonArcPair.x = true;
+    } else if ((arcProd == 0) && (numArcs == toExploreNumArcsSecond[intervalIdx])) {
+      // TODO: Likely not the brightest idea to use -1 as sentinel
+      result.arcPair = make_int2(-1, localIdx);
+      result.checkEpsilonArcPair.y = true;
     }
   }
 
@@ -275,9 +352,9 @@ calculateArcCrossProductOffsetGPU(
   int* toExploreNumArcsFirstGPU;
   int* toExploreNumArcsSecondGPU;
   int* arcCrossProductOffsetGPU;
-  cudaMalloc((void **)(&(toExploreNumArcsFirstGPU)), sizeof(int) * numToExploreNodePair);
-  cudaMalloc((void **)(&(toExploreNumArcsSecondGPU)), sizeof(int) * numToExploreNodePair);
-  cudaMalloc((void **)(&(arcCrossProductOffsetGPU)), sizeof(int) * numToExploreNodePair);
+  CUDA_CHECK(cudaMalloc((void **)(&(toExploreNumArcsFirstGPU)), sizeof(int) * numToExploreNodePair));
+  CUDA_CHECK(cudaMalloc((void **)(&(toExploreNumArcsSecondGPU)), sizeof(int) * numToExploreNodePair));
+  CUDA_CHECK(cudaMalloc((void **)(&(arcCrossProductOffsetGPU)), sizeof(int) * numToExploreNodePair));
 
   const int NT = 128;
   const int gridSize = div_up(numToExploreNodePair, NT);
@@ -433,8 +510,8 @@ std::tuple<int*, int*, size_t> convertToNodePairGPU(
 
   int* toExploreNodePairFirstGPU;
   int* toExploreNodePairSecondGPU;
-  cudaMalloc((void **)(&(toExploreNodePairFirstGPU)), sizeof(int) * numValidNodes);
-  cudaMalloc((void **)(&(toExploreNodePairSecondGPU)), sizeof(int) * numValidNodes);
+  CUDA_CHECK(cudaMalloc((void **)(&(toExploreNodePairFirstGPU)), sizeof(int) * numValidNodes));
+  CUDA_CHECK(cudaMalloc((void **)(&(toExploreNodePairSecondGPU)), sizeof(int) * numValidNodes));
 
   const int NT = 128;
   const int gridSize = div_up(numFlags, NT);
@@ -443,7 +520,7 @@ std::tuple<int*, int*, size_t> convertToNodePairGPU(
     toExploreNodePairFirstGPU, toExploreNodePairSecondGPU,
     extent, numFlags, numValidNodes);
 
-  cudaFree(indicesGPU);
+  CUDA_CHECK(cudaFree(indicesGPU));
   return std::make_tuple(toExploreNodePairFirstGPU, toExploreNodePairSecondGPU, numValidNodes);
 }
 
@@ -481,37 +558,37 @@ GraphDataParallelGPU copyToGPU(const GraphDataParallel& graphDP) {
   assert(graphDP.weights.size() == graphDPGPU.numArcs);
 
   // Allocate memory
-  cudaMalloc((void **)(&(graphDPGPU.accept)), sizeof(int) * graphDPGPU.numNodes);
+  CUDA_CHECK(cudaMalloc((void **)(&(graphDPGPU.accept)), sizeof(int) * graphDPGPU.numNodes));
 
-  cudaMalloc((void **)(&(graphDPGPU.start)), sizeof(int) * graphDPGPU.numNodes);
+  CUDA_CHECK(cudaMalloc((void **)(&(graphDPGPU.start)), sizeof(int) * graphDPGPU.numNodes));
 
-  cudaMalloc((void **)(&(graphDPGPU.inArcOffset)), sizeof(int) * graphDPGPU.numNodes);
-  cudaMalloc((void **)(&(graphDPGPU.outArcOffset)), sizeof(int) * graphDPGPU.numNodes);
+  CUDA_CHECK(cudaMalloc((void **)(&(graphDPGPU.inArcOffset)), sizeof(int) * graphDPGPU.numNodes));
+  CUDA_CHECK(cudaMalloc((void **)(&(graphDPGPU.outArcOffset)), sizeof(int) * graphDPGPU.numNodes));
 
-  cudaMalloc((void **)(&(graphDPGPU.inArcs)), sizeof(int) * graphDPGPU.numArcs);
-  cudaMalloc((void **)(&(graphDPGPU.outArcs)), sizeof(int) * graphDPGPU.numArcs);
+  CUDA_CHECK(cudaMalloc((void **)(&(graphDPGPU.inArcs)), sizeof(int) * graphDPGPU.numArcs));
+  CUDA_CHECK(cudaMalloc((void **)(&(graphDPGPU.outArcs)), sizeof(int) * graphDPGPU.numArcs));
 
-  cudaMalloc((void **)(&(graphDPGPU.ilabels)), sizeof(int) * graphDPGPU.numArcs);
-  cudaMalloc((void **)(&(graphDPGPU.olabels)), sizeof(int) * graphDPGPU.numArcs);
-  cudaMalloc((void **)(&(graphDPGPU.srcNodes)), sizeof(int) * graphDPGPU.numArcs);
-  cudaMalloc((void **)(&(graphDPGPU.dstNodes)), sizeof(int) * graphDPGPU.numArcs);
-  cudaMalloc((void **)(&(graphDPGPU.weights)), sizeof(float) * graphDPGPU.numArcs);
+  CUDA_CHECK(cudaMalloc((void **)(&(graphDPGPU.ilabels)), sizeof(int) * graphDPGPU.numArcs));
+  CUDA_CHECK(cudaMalloc((void **)(&(graphDPGPU.olabels)), sizeof(int) * graphDPGPU.numArcs));
+  CUDA_CHECK(cudaMalloc((void **)(&(graphDPGPU.srcNodes)), sizeof(int) * graphDPGPU.numArcs));
+  CUDA_CHECK(cudaMalloc((void **)(&(graphDPGPU.dstNodes)), sizeof(int) * graphDPGPU.numArcs));
+  CUDA_CHECK(cudaMalloc((void **)(&(graphDPGPU.weights)), sizeof(float) * graphDPGPU.numArcs));
 
   // Copy
-  cudaMemcpy((void *)(graphDPGPU.accept), (void *)(graphDP.accept.data()), sizeof(int) * graphDPGPU.numNodes, cudaMemcpyHostToDevice);
-  cudaMemcpy((void *)(graphDPGPU.start), (void *)(graphDP.start.data()), sizeof(int) * graphDPGPU.numNodes, cudaMemcpyHostToDevice);
+  CUDA_CHECK(cudaMemcpy((void *)(graphDPGPU.accept), (void *)(graphDP.accept.data()), sizeof(int) * graphDPGPU.numNodes, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy((void *)(graphDPGPU.start), (void *)(graphDP.start.data()), sizeof(int) * graphDPGPU.numNodes, cudaMemcpyHostToDevice));
 
-  cudaMemcpy((void *)(graphDPGPU.inArcOffset), (void *)(graphDP.inArcOffset.data()), sizeof(int) * graphDPGPU.numNodes, cudaMemcpyHostToDevice);
-  cudaMemcpy((void *)(graphDPGPU.outArcOffset), (void *)(graphDP.outArcOffset.data()), sizeof(int) * graphDPGPU.numNodes, cudaMemcpyHostToDevice);
+  CUDA_CHECK(cudaMemcpy((void *)(graphDPGPU.inArcOffset), (void *)(graphDP.inArcOffset.data()), sizeof(int) * graphDPGPU.numNodes, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy((void *)(graphDPGPU.outArcOffset), (void *)(graphDP.outArcOffset.data()), sizeof(int) * graphDPGPU.numNodes, cudaMemcpyHostToDevice));
 
-  cudaMemcpy((void *)(graphDPGPU.inArcs), (void *)(graphDP.inArcs.data()), sizeof(int) * graphDPGPU.numArcs, cudaMemcpyHostToDevice);
-  cudaMemcpy((void *)(graphDPGPU.outArcs), (void *)(graphDP.outArcs.data()), sizeof(int) * graphDPGPU.numArcs, cudaMemcpyHostToDevice);
+  CUDA_CHECK(cudaMemcpy((void *)(graphDPGPU.inArcs), (void *)(graphDP.inArcs.data()), sizeof(int) * graphDPGPU.numArcs, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy((void *)(graphDPGPU.outArcs), (void *)(graphDP.outArcs.data()), sizeof(int) * graphDPGPU.numArcs, cudaMemcpyHostToDevice));
 
-  cudaMemcpy((void *)(graphDPGPU.ilabels), (void *)(graphDP.ilabels.data()), sizeof(int) * graphDPGPU.numArcs, cudaMemcpyHostToDevice);
-  cudaMemcpy((void *)(graphDPGPU.olabels), (void *)(graphDP.olabels.data()), sizeof(int) * graphDPGPU.numArcs, cudaMemcpyHostToDevice);
-  cudaMemcpy((void *)(graphDPGPU.srcNodes), (void *)(graphDP.srcNodes.data()), sizeof(int) * graphDPGPU.numArcs, cudaMemcpyHostToDevice);
-  cudaMemcpy((void *)(graphDPGPU.dstNodes), (void *)(graphDP.dstNodes.data()), sizeof(int) * graphDPGPU.numArcs, cudaMemcpyHostToDevice);
-  cudaMemcpy((void *)(graphDPGPU.weights), (void *)(graphDP.weights.data()), sizeof(float) * graphDPGPU.numArcs, cudaMemcpyHostToDevice);
+  CUDA_CHECK(cudaMemcpy((void *)(graphDPGPU.ilabels), (void *)(graphDP.ilabels.data()), sizeof(int) * graphDPGPU.numArcs, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy((void *)(graphDPGPU.olabels), (void *)(graphDP.olabels.data()), sizeof(int) * graphDPGPU.numArcs, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy((void *)(graphDPGPU.srcNodes), (void *)(graphDP.srcNodes.data()), sizeof(int) * graphDPGPU.numArcs, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy((void *)(graphDPGPU.dstNodes), (void *)(graphDP.dstNodes.data()), sizeof(int) * graphDPGPU.numArcs, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy((void *)(graphDPGPU.weights), (void *)(graphDP.weights.data()), sizeof(float) * graphDPGPU.numArcs, cudaMemcpyHostToDevice));
 
   return graphDPGPU;
 }
@@ -1004,13 +1081,13 @@ Graph compose(const Graph& first, const Graph& second) {
   int* epsilonMatchedGPU;
   int* toExploreGPU;
 
-  cudaMalloc((void **)(&reachableGPU), sizeof(int) * numAllPairNodes);
-  cudaMalloc((void **)(&epsilonMatchedGPU), sizeof(int) * numAllPairNodes);
-  cudaMalloc((void **)(&toExploreGPU), sizeof(int) * numAllPairNodes);
+  CUDA_CHECK(cudaMalloc((void **)(&reachableGPU), sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMalloc((void **)(&epsilonMatchedGPU), sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMalloc((void **)(&toExploreGPU), sizeof(int) * numAllPairNodes));
 
-  cudaMemset((void*)reachableGPU, false, sizeof(int) * numAllPairNodes);
-  cudaMemset((void*)epsilonMatchedGPU, false, sizeof(int) * numAllPairNodes);
-  cudaMemset((void*)toExploreGPU, false, sizeof(int) * numAllPairNodes);
+  CUDA_CHECK(cudaMemset((void*)reachableGPU, false, sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMemset((void*)epsilonMatchedGPU, false, sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMemset((void*)toExploreGPU, false, sizeof(int) * numAllPairNodes));
 
   {
     const int gridSize = div_up(numAllPairNodes, NT);
@@ -1048,10 +1125,10 @@ Graph compose(const Graph& first, const Graph& second) {
       prefixSumScanGPU(arcCrossProductIndexGPU, numToExploreNodePair, true);
     assert(numArcCrossProductOffset == (numToExploreNodePair + 1));
 
-    cudaFree(arcCrossProductIndexGPU);
+    CUDA_CHECK(cudaFree(arcCrossProductIndexGPU));
 
     // Reset so pristine state for next frontier to explore
-    cudaMemset((void*)toExploreGPU, false, sizeof(int) * numAllPairNodes);
+    CUDA_CHECK(cudaMemset((void*)toExploreGPU, false, sizeof(int) * numAllPairNodes));
 
     if (totalArcs > 0) {
 
@@ -1063,11 +1140,11 @@ Graph compose(const Graph& first, const Graph& second) {
 		      toExploreGPU, reachableGPU, epsilonMatchedGPU);
     }
 
-    cudaFree(toExploreNodePairFirstGPU);
-    cudaFree(toExploreNodePairSecondGPU);
-    cudaFree(arcCrossProductOffsetGPU);
-    cudaFree(toExploreNumArcsFirstGPU);
-    cudaFree(toExploreNumArcsSecondGPU);
+    CUDA_CHECK(cudaFree(toExploreNodePairFirstGPU));
+    CUDA_CHECK(cudaFree(toExploreNodePairSecondGPU));
+    CUDA_CHECK(cudaFree(arcCrossProductOffsetGPU));
+    CUDA_CHECK(cudaFree(toExploreNumArcsFirstGPU));
+    CUDA_CHECK(cudaFree(toExploreNumArcsSecondGPU));
   } // end while for findReachable
 
   //////////////////////////////////////////////////////////////////////////
@@ -1081,15 +1158,15 @@ Graph compose(const Graph& first, const Graph& second) {
   int* numOutArcsGPU;
   int* numInArcsGPU;
 
-  cudaMalloc((void **)(&newNodesGPU), sizeof(int) * numAllPairNodes);
-  cudaMalloc((void **)(&numOutArcsGPU), sizeof(int) * numAllPairNodes);
-  cudaMalloc((void **)(&numInArcsGPU), sizeof(int) * numAllPairNodes);
+  CUDA_CHECK(cudaMalloc((void **)(&newNodesGPU), sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMalloc((void **)(&numOutArcsGPU), sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMalloc((void **)(&numInArcsGPU), sizeof(int) * numAllPairNodes));
 
-  cudaMemset((void*)newNodesGPU, false, sizeof(int) * numAllPairNodes);
-  cudaMemset((void*)numOutArcsGPU, 0, sizeof(int) * numAllPairNodes);
-  cudaMemset((void*)numInArcsGPU, 0, sizeof(int) * numAllPairNodes);
+  CUDA_CHECK(cudaMemset((void*)newNodesGPU, false, sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMemset((void*)numOutArcsGPU, 0, sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMemset((void*)numInArcsGPU, 0, sizeof(int) * numAllPairNodes));
 
-  cudaMemset((void*)toExploreGPU, false, sizeof(int) * numAllPairNodes);
+  CUDA_CHECK(cudaMemset((void*)toExploreGPU, false, sizeof(int) * numAllPairNodes));
 
   {
     const int gridSize = div_up(numAllPairNodes, NT);
@@ -1125,10 +1202,10 @@ Graph compose(const Graph& first, const Graph& second) {
       prefixSumScanGPU(arcCrossProductIndexGPU, numToExploreNodePair, true);
     assert(numArcCrossProductOffset == (numToExploreNodePair + 1));
 
-    cudaFree(arcCrossProductIndexGPU);
+    CUDA_CHECK(cudaFree(arcCrossProductIndexGPU));
 
     // Reset so pristine state for next frontier to explore
-    cudaMemset((void*)toExploreGPU, false, sizeof(int) * numAllPairNodes);
+    CUDA_CHECK(cudaMemset((void*)toExploreGPU, false, sizeof(int) * numAllPairNodes));
 
     if (totalArcs > 0) {
 
@@ -1141,11 +1218,11 @@ Graph compose(const Graph& first, const Graph& second) {
         toExploreGPU, newNodesGPU, numInArcsGPU, numOutArcsGPU);
     }
 
-    cudaFree(toExploreNodePairFirstGPU);
-    cudaFree(toExploreNodePairSecondGPU);
-    cudaFree(arcCrossProductOffsetGPU);
-    cudaFree(toExploreNumArcsFirstGPU);
-    cudaFree(toExploreNumArcsSecondGPU);
+    CUDA_CHECK(cudaFree(toExploreNodePairFirstGPU));
+    CUDA_CHECK(cudaFree(toExploreNodePairSecondGPU));
+    CUDA_CHECK(cudaFree(arcCrossProductOffsetGPU));
+    CUDA_CHECK(cudaFree(toExploreNumArcsFirstGPU));
+    CUDA_CHECK(cudaFree(toExploreNumArcsSecondGPU));
   }
 
   //////////////////////////////////////////////////////////////////////////
@@ -1160,10 +1237,10 @@ Graph compose(const Graph& first, const Graph& second) {
   assert(numElements == numAllPairNodes);
 
   newGraphDPGPU.numNodes = totalNodes;
-  cudaMalloc((void **)(&(newGraphDPGPU.start)), sizeof(int) * totalNodes);
-  cudaMalloc((void **)(&(newGraphDPGPU.accept)), sizeof(int) * totalNodes);
-  cudaMalloc((void **)(&(newGraphDPGPU.inArcOffset)), sizeof(int) * totalNodes);
-  cudaMalloc((void **)(&(newGraphDPGPU.outArcOffset)), sizeof(int) * totalNodes);
+  CUDA_CHECK(cudaMalloc((void **)(&(newGraphDPGPU.start)), sizeof(int) * totalNodes));
+  CUDA_CHECK(cudaMalloc((void **)(&(newGraphDPGPU.accept)), sizeof(int) * totalNodes));
+  CUDA_CHECK(cudaMalloc((void **)(&(newGraphDPGPU.inArcOffset)), sizeof(int) * totalNodes));
+  CUDA_CHECK(cudaMalloc((void **)(&(newGraphDPGPU.outArcOffset)), sizeof(int) * totalNodes));
 
   // Generate offsets for nodes and arcs
   {
@@ -1189,16 +1266,16 @@ Graph compose(const Graph& first, const Graph& second) {
 
   assert(totalInArcs == totalOutArcs);
   newGraphDPGPU.numArcs = totalOutArcs;
-  cudaMalloc((void **)(&(newGraphDPGPU.inArcs)), sizeof(int) * totalInArcs);
-  cudaMalloc((void **)(&(newGraphDPGPU.outArcs)), sizeof(int) * totalOutArcs);
-  cudaMalloc((void **)(&(newGraphDPGPU.ilabels)), sizeof(int) * totalOutArcs);
-  cudaMalloc((void **)(&(newGraphDPGPU.olabels)), sizeof(int) * totalOutArcs);
-  cudaMalloc((void **)(&(newGraphDPGPU.srcNodes)), sizeof(int) * totalOutArcs);
-  cudaMalloc((void **)(&(newGraphDPGPU.dstNodes)), sizeof(int) * totalOutArcs);
-  cudaMalloc((void **)(&(newGraphDPGPU.weights)), sizeof(float) * totalOutArcs);
+  CUDA_CHECK(cudaMalloc((void **)(&(newGraphDPGPU.inArcs)), sizeof(int) * totalInArcs));
+  CUDA_CHECK(cudaMalloc((void **)(&(newGraphDPGPU.outArcs)), sizeof(int) * totalOutArcs));
+  CUDA_CHECK(cudaMalloc((void **)(&(newGraphDPGPU.ilabels)), sizeof(int) * totalOutArcs));
+  CUDA_CHECK(cudaMalloc((void **)(&(newGraphDPGPU.olabels)), sizeof(int) * totalOutArcs));
+  CUDA_CHECK(cudaMalloc((void **)(&(newGraphDPGPU.srcNodes)), sizeof(int) * totalOutArcs));
+  CUDA_CHECK(cudaMalloc((void **)(&(newGraphDPGPU.dstNodes)), sizeof(int) * totalOutArcs));
+  CUDA_CHECK(cudaMalloc((void **)(&(newGraphDPGPU.weights)), sizeof(float) * totalOutArcs));
 
-  cudaMemcpy((void *)(newGraphDPGPU.inArcOffset), (void *)(inArcOffsetGPU), sizeof(int) * totalNodes, cudaMemcpyDeviceToDevice);
-  cudaMemcpy((void *)(newGraphDPGPU.outArcOffset), (void *)(outArcOffsetGPU), sizeof(int) * totalNodes, cudaMemcpyDeviceToDevice);
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDPGPU.inArcOffset), (void *)(inArcOffsetGPU), sizeof(int) * totalNodes, cudaMemcpyDeviceToDevice));
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDPGPU.outArcOffset), (void *)(outArcOffsetGPU), sizeof(int) * totalNodes, cudaMemcpyDeviceToDevice));
 
   // std::cout << "totalInArcs " << totalInArcs << " totalOutArcs " << totalOutArcs << std::endl;
 
@@ -1210,21 +1287,21 @@ Graph compose(const Graph& first, const Graph& second) {
   int *gradInfoFirstGPU;
   int *gradInfoSecondGPU;
 
-  cudaMalloc((void **)(&gradInfoFirstGPU), sizeof(int) * totalOutArcs);
-  cudaMalloc((void **)(&gradInfoSecondGPU), sizeof(int) * totalOutArcs);
+  CUDA_CHECK(cudaMalloc((void **)(&gradInfoFirstGPU), sizeof(int) * totalOutArcs));
+  CUDA_CHECK(cudaMalloc((void **)(&gradInfoSecondGPU), sizeof(int) * totalOutArcs));
 
   //////////////////////////////////////////////////////////////////////////
   // Step 4: Generate nodes and arcs in combined graph
   //////////////////////////////////////////////////////////////////////////
 
   int* newNodesVisitedGPU;
-  cudaMalloc((void **)(&newNodesVisitedGPU), sizeof(int) * numAllPairNodes);
-  cudaMemset((void*)newNodesVisitedGPU, false, sizeof(int) * numAllPairNodes);
+  CUDA_CHECK(cudaMalloc((void **)(&newNodesVisitedGPU), sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMemset((void*)newNodesVisitedGPU, false, sizeof(int) * numAllPairNodes));
 
   // Reset so pristine state for next frontier to explore
-  cudaMemset((void*)toExploreGPU, false, sizeof(int) * numAllPairNodes);
-  cudaMemset((void *)(newGraphDPGPU.start), false, sizeof(int) * totalNodes);
-  cudaMemset((void *)(newGraphDPGPU.accept), false, sizeof(int) * totalNodes);
+  CUDA_CHECK(cudaMemset((void*)toExploreGPU, false, sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMemset((void *)(newGraphDPGPU.start), false, sizeof(int) * totalNodes));
+  CUDA_CHECK(cudaMemset((void *)(newGraphDPGPU.accept), false, sizeof(int) * totalNodes));
 
   {
     const int gridSize = div_up(numAllPairNodes, NT);
@@ -1261,10 +1338,10 @@ Graph compose(const Graph& first, const Graph& second) {
       prefixSumScanGPU(arcCrossProductIndexGPU, numToExploreNodePair, true);
     assert(numArcCrossProductOffset == (numToExploreNodePair + 1));
 
-    cudaFree(arcCrossProductIndexGPU);
+    CUDA_CHECK(cudaFree(arcCrossProductIndexGPU));
 
     // Reset so pristine state for next frontier to explore
-    cudaMemset((void*)toExploreGPU, false, sizeof(int) * numAllPairNodes);
+    CUDA_CHECK(cudaMemset((void*)toExploreGPU, false, sizeof(int) * numAllPairNodes));
 
     if (totalArcs > 0) {
 
@@ -1278,16 +1355,16 @@ Graph compose(const Graph& first, const Graph& second) {
         newNodesOffsetGPU, newNodesVisitedGPU);
     }
 
-    cudaFree(toExploreNodePairFirstGPU);
-    cudaFree(toExploreNodePairSecondGPU);
-    cudaFree(arcCrossProductOffsetGPU);
-    cudaFree(toExploreNumArcsFirstGPU);
-    cudaFree(toExploreNumArcsSecondGPU);
+    CUDA_CHECK(cudaFree(toExploreNodePairFirstGPU));
+    CUDA_CHECK(cudaFree(toExploreNodePairSecondGPU));
+    CUDA_CHECK(cudaFree(arcCrossProductOffsetGPU));
+    CUDA_CHECK(cudaFree(toExploreNumArcsFirstGPU));
+    CUDA_CHECK(cudaFree(toExploreNumArcsSecondGPU));
   }
 
   // Reset incremented offsets to original value
-  cudaMemcpy((void *)(newGraphDPGPU.inArcOffset), (void *)(inArcOffsetGPU), sizeof(int) * newGraphDPGPU.numNodes, cudaMemcpyDeviceToDevice);
-  cudaMemcpy((void *)(newGraphDPGPU.outArcOffset), (void *)(outArcOffsetGPU), sizeof(int) * newGraphDPGPU.numNodes, cudaMemcpyDeviceToDevice);
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDPGPU.inArcOffset), (void *)(inArcOffsetGPU), sizeof(int) * newGraphDPGPU.numNodes, cudaMemcpyDeviceToDevice));
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDPGPU.outArcOffset), (void *)(outArcOffsetGPU), sizeof(int) * newGraphDPGPU.numNodes, cudaMemcpyDeviceToDevice));
 
   // Copy graph on GPU to CPU
   GraphDataParallel newGraphDP;
@@ -1303,46 +1380,46 @@ Graph compose(const Graph& first, const Graph& second) {
   newGraphDP.dstNodes.resize(totalOutArcs);
   newGraphDP.weights.resize(totalOutArcs);
  
-  cudaMemcpy((void *)(newGraphDP.accept.data()), (void *)(newGraphDPGPU.accept), sizeof(int) * newGraphDPGPU.numNodes, cudaMemcpyDeviceToHost);
-  cudaMemcpy((void *)(newGraphDP.start.data()), (void *)(newGraphDPGPU.start), sizeof(int) * newGraphDPGPU.numNodes, cudaMemcpyDeviceToHost);
-  cudaMemcpy((void *)(newGraphDP.inArcOffset.data()), (void *)(newGraphDPGPU.inArcOffset), sizeof(int) * newGraphDPGPU.numNodes, cudaMemcpyDeviceToHost);
-  cudaMemcpy((void *)(newGraphDP.outArcOffset.data()), (void *)(newGraphDPGPU.outArcOffset), sizeof(int) * newGraphDPGPU.numNodes, cudaMemcpyDeviceToHost);
-  cudaMemcpy((void *)(newGraphDP.inArcs.data()), (void *)(newGraphDPGPU.inArcs), sizeof(int) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost);
-  cudaMemcpy((void *)(newGraphDP.outArcs.data()), (void *)(newGraphDPGPU.outArcs), sizeof(int) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost);
-  cudaMemcpy((void *)(newGraphDP.ilabels.data()), (void *)(newGraphDPGPU.ilabels), sizeof(int) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost);
-  cudaMemcpy((void *)(newGraphDP.olabels.data()), (void *)(newGraphDPGPU.olabels), sizeof(int) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost);
-  cudaMemcpy((void *)(newGraphDP.srcNodes.data()), (void *)(newGraphDPGPU.srcNodes), sizeof(int) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost);
-  cudaMemcpy((void *)(newGraphDP.dstNodes.data()), (void *)(newGraphDPGPU.dstNodes), sizeof(int) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost);
-  cudaMemcpy((void *)(newGraphDP.weights.data()), (void *)(newGraphDPGPU.weights), sizeof(float) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost);
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDP.accept.data()), (void *)(newGraphDPGPU.accept), sizeof(int) * newGraphDPGPU.numNodes, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDP.start.data()), (void *)(newGraphDPGPU.start), sizeof(int) * newGraphDPGPU.numNodes, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDP.inArcOffset.data()), (void *)(newGraphDPGPU.inArcOffset), sizeof(int) * newGraphDPGPU.numNodes, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDP.outArcOffset.data()), (void *)(newGraphDPGPU.outArcOffset), sizeof(int) * newGraphDPGPU.numNodes, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDP.inArcs.data()), (void *)(newGraphDPGPU.inArcs), sizeof(int) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDP.outArcs.data()), (void *)(newGraphDPGPU.outArcs), sizeof(int) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDP.ilabels.data()), (void *)(newGraphDPGPU.ilabels), sizeof(int) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDP.olabels.data()), (void *)(newGraphDPGPU.olabels), sizeof(int) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDP.srcNodes.data()), (void *)(newGraphDPGPU.srcNodes), sizeof(int) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDP.dstNodes.data()), (void *)(newGraphDPGPU.dstNodes), sizeof(int) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy((void *)(newGraphDP.weights.data()), (void *)(newGraphDPGPU.weights), sizeof(float) * newGraphDPGPU.numArcs, cudaMemcpyDeviceToHost));
 
   assert(newGraphDPGPU.numArcs == totalOutArcs);
-  cudaMemcpy((void *)(gradInfo.first.data()), (void *)(gradInfoFirstGPU), sizeof(int) * totalOutArcs, cudaMemcpyDeviceToHost);
-  cudaMemcpy((void *)(gradInfo.second.data()), (void *)(gradInfoSecondGPU), sizeof(int) * totalOutArcs, cudaMemcpyDeviceToHost);
+  CUDA_CHECK(cudaMemcpy((void *)(gradInfo.first.data()), (void *)(gradInfoFirstGPU), sizeof(int) * totalOutArcs, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy((void *)(gradInfo.second.data()), (void *)(gradInfoSecondGPU), sizeof(int) * totalOutArcs, cudaMemcpyDeviceToHost));
 
-  cudaFree(reachableGPU);
-  cudaFree(epsilonMatchedGPU);
-  cudaFree(toExploreGPU);
-  cudaFree(newNodesGPU);
-  cudaFree(numOutArcsGPU);
-  cudaFree(numInArcsGPU);
-  cudaFree(newNodesOffsetGPU);
-  cudaFree(inArcOffsetGPU);
-  cudaFree(outArcOffsetGPU);
-  cudaFree(gradInfoFirstGPU);
-  cudaFree(gradInfoSecondGPU);
-  cudaFree(newNodesVisitedGPU);
+  CUDA_CHECK(cudaFree(reachableGPU));
+  CUDA_CHECK(cudaFree(epsilonMatchedGPU));
+  CUDA_CHECK(cudaFree(toExploreGPU));
+  CUDA_CHECK(cudaFree(newNodesGPU));
+  CUDA_CHECK(cudaFree(numOutArcsGPU));
+  CUDA_CHECK(cudaFree(numInArcsGPU));
+  CUDA_CHECK(cudaFree(newNodesOffsetGPU));
+  CUDA_CHECK(cudaFree(inArcOffsetGPU));
+  CUDA_CHECK(cudaFree(outArcOffsetGPU));
+  CUDA_CHECK(cudaFree(gradInfoFirstGPU));
+  CUDA_CHECK(cudaFree(gradInfoSecondGPU));
+  CUDA_CHECK(cudaFree(newNodesVisitedGPU));
 
-  cudaFree(newGraphDPGPU.start);
-  cudaFree(newGraphDPGPU.accept);
-  cudaFree(newGraphDPGPU.inArcOffset);
-  cudaFree(newGraphDPGPU.outArcOffset);
-  cudaFree(newGraphDPGPU.inArcs);
-  cudaFree(newGraphDPGPU.outArcs);
-  cudaFree(newGraphDPGPU.ilabels);
-  cudaFree(newGraphDPGPU.olabels);
-  cudaFree(newGraphDPGPU.srcNodes);
-  cudaFree(newGraphDPGPU.dstNodes);
-  cudaFree(newGraphDPGPU.weights);
+  CUDA_CHECK(cudaFree(newGraphDPGPU.start));
+  CUDA_CHECK(cudaFree(newGraphDPGPU.accept));
+  CUDA_CHECK(cudaFree(newGraphDPGPU.inArcOffset));
+  CUDA_CHECK(cudaFree(newGraphDPGPU.outArcOffset));
+  CUDA_CHECK(cudaFree(newGraphDPGPU.inArcs));
+  CUDA_CHECK(cudaFree(newGraphDPGPU.outArcs));
+  CUDA_CHECK(cudaFree(newGraphDPGPU.ilabels));
+  CUDA_CHECK(cudaFree(newGraphDPGPU.olabels));
+  CUDA_CHECK(cudaFree(newGraphDPGPU.srcNodes));
+  CUDA_CHECK(cudaFree(newGraphDPGPU.dstNodes));
+  CUDA_CHECK(cudaFree(newGraphDPGPU.weights));
   newGraphDPGPU.numNodes = 0;
   newGraphDPGPU.numArcs = 0;
 
@@ -1482,191 +1559,3 @@ Graph compose(const Graph& first, const Graph& second) {
 } // namespace dataparallel
 } // namespace detail
 } // namespace gtn
-
-    /*
-    if (0)
-    {
-      int *aCPGPU;
-      int *tEN1GPU;
-      int *tEN2GPU;
-
-      std::tie(aCPGPU, tEN1GPU, tEN2GPU) = calculateArcCrossProductOffsetGPU(
-        toExploreNodePairFirstGPU, toExploreNodePairSecondGPU,
-        toExploreNodePair.first.size(), graphDP1GPU, graphDP2GPU, true);
-
-      std::vector<int> aCP(numToExploreNodePair);
-      std::vector<int> tEN1(numToExploreNodePair);
-      std::vector<int> tEN2(numToExploreNodePair);
-
-      cudaMemcpy((void *)(aCP.data()), (void *)(aCPGPU), sizeof(int) * numToExploreNodePair, cudaMemcpyDeviceToHost);
-      cudaMemcpy((void *)(tEN1.data()), (void *)(tEN1GPU), sizeof(int) * numToExploreNodePair, cudaMemcpyDeviceToHost);
-      cudaMemcpy((void *)(tEN2.data()), (void *)(tEN2GPU), sizeof(int) * numToExploreNodePair, cudaMemcpyDeviceToHost);
-
-      assert(std::equal(arcCrossProductOffset.begin(), arcCrossProductOffset.end(), aCP.begin()));
-      assert(std::equal(toExploreNumArcs.first.begin(), toExploreNumArcs.first.end(), tEN1.begin()));
-      assert(std::equal(toExploreNumArcs.second.begin(), toExploreNumArcs.second.end(), tEN2.begin()));
-
-      cudaFree(aCPGPU);
-      cudaFree(tEN1GPU);
-      cudaFree(tEN2GPU);
-    }*/
-
-    /*
-    if(0)
-    {
-      std::vector<int> tVec(arcCrossProductOffset);
-      const size_t numElts = tVec.size();
-      int* tVecGPU;
-      cudaMalloc((void **)(&tVecGPU), sizeof(int) * numElts);
-      cudaMemcpy((void *)tVecGPU, (void *)(tVec.data()), sizeof(int) * numElts, cudaMemcpyHostToDevice);
-
-      const int totalArcs = prefixSumScan(tVec, true);
-      int* tVecScanGPU;
-      size_t tVecScanElts;
-      int tArcsGPU;
-      std::tie(tVecScanGPU, tVecScanElts, tArcsGPU) = prefixSumScanGPU(tVecGPU, numElts, true);
-
-      assert(tVec.size() == (numElts + 1));
-      assert(tVecScanElts == (numElts + 1));
-      std::vector<int> tVecNew(tVec.size());
-      cudaMemcpy((void *)(tVecNew.data()), (void *)(tVecScanGPU), sizeof(int) * tVecScanElts, cudaMemcpyDeviceToHost);
-
-      assert(totalArcs == tArcsGPU);
-      assert(std::equal(tVec.begin(), tVec.end(), tVecNew.begin()));
-
-      cudaFree(tVecGPU);
-      cudaFree(tVecScanGPU);
-    }*/
-
-    /*
-    if (0)
-    {
-      int* tEN1GPU;
-      int* tEN2GPU;
-      size_t nTEN;
-
-      std::tie(tEN1GPU, tEN2GPU, nTEN) = convertToNodePairGPU(toExploreGPU, numAllPairNodes, numNodesFirst);
-
-      assert(nTEN == toExploreNodePair.first.size());
-
-      std::vector<int> tEN1(nTEN);
-      std::vector<int> tEN2(nTEN);
-      cudaMemcpy((void *)(tEN1.data()), (void *)(tEN1GPU), sizeof(int) * nTEN, cudaMemcpyDeviceToHost);
-      cudaMemcpy((void *)(tEN2.data()), (void *)(tEN2GPU), sizeof(int) * nTEN, cudaMemcpyDeviceToHost);
-
-      assert(std::equal(toExploreNodePair.first.begin(), toExploreNodePair.first.end(), tEN1.begin()));
-      assert(std::equal(toExploreNodePair.second.begin(), toExploreNodePair.second.end(), tEN2.begin()));
-
-      cudaFree(tEN1GPU);
-      cudaFree(tEN2GPU);
-    }*/
-
-/*
-inline std::pair<int, int> OneDToTwoDIndex(int n, int n1Extent) {
-  assert(n1Extent > 0);
-  const int n2 = n / n1Extent;
-  const int n1 = n % n1Extent;
-  return std::make_pair(n1, n2);
-}
-
-
-bool checkAnyTrue(const std::vector<int>& flags) {
-  // Potentially wasteful - but GPU friendly
-  return std::accumulate(flags.begin(), flags.end(), 0) > 0 ? true : false;
-}*/
-
-
-/*
-// Convert int array to pairs for true flags
-std::pair<std::vector<int>, std::vector<int>> convertToNodePair(
-    const std::vector<int>& flags,
-    int extent) {
-  std::vector<int> indices(flags);
-  const int numValidNodes = prefixSumScan(indices, false);
-
-  std::vector<int> toExploreNodePairFirst(numValidNodes);
-  std::vector<int> toExploreNodePairSecond(numValidNodes);
-
-  // No loop dependence
-  for (size_t i = 0; i < flags.size(); ++i) {
-    if (flags[i] == true) {
-      std::pair<int, int> node = OneDToTwoDIndex(i, extent);
-
-      const int index = indices[i];
-      assert(index >= 0);
-      assert(index < numValidNodes);
-      toExploreNodePairFirst[index] = node.first;
-      toExploreNodePairSecond[index] = node.second;
-    }
-  }
-
-  return std::make_pair(toExploreNodePairFirst, toExploreNodePairSecond);
-}*/
-
-// Takes a pair of nodes, where each member of pair comes from a different
-// graph and calculate a vector of number of arcs in the cross product of
-// arcs outgoing from each pair.
-// This should be a kernel call
-/*
-std::tuple<std::vector<int>, std::pair<std::vector<int>, std::vector<int>>>
-calculateArcCrossProductOffset(
-    const std::pair<std::vector<int>, std::vector<int>>& toExploreNodePair,
-    const GraphDataParallel& graphDP1,
-    const GraphDataParallel& graphDP2,
-    bool inOrOutArc) {
-  assert(toExploreNodePair.first.size() == toExploreNodePair.second.size());
-
-  std::pair<std::vector<int>, std::vector<int>> toExploreNumArcs;
-  toExploreNumArcs.first.resize(toExploreNodePair.first.size());
-  toExploreNumArcs.second.resize(toExploreNodePair.first.size());
-
-  std::vector<int> arcCrossProductOffset(toExploreNodePair.first.size());
-
-  // No dependence between iterations
-  for (size_t i = 0; i < toExploreNodePair.first.size(); ++i) {
-    int node = (toExploreNodePair.first)[i];
-    // Special case if it is the last node. Then the offset becomes
-    // the number of arcs
-    const int inArcOffsetGraph1 = ((node + 1) == graphDP1.inArcOffset.size())
-        ? graphDP1.inArcs.size()
-        : graphDP1.inArcOffset[node + 1];
-    const int outArcOffsetGraph1 = ((node + 1) == graphDP1.outArcOffset.size())
-        ? graphDP1.outArcs.size()
-        : graphDP1.outArcOffset[node + 1];
-
-    const int numArcsFirst = inOrOutArc
-        ? inArcOffsetGraph1 - graphDP1.inArcOffset[node]
-        : outArcOffsetGraph1 - graphDP1.outArcOffset[node];
-
-    node = (toExploreNodePair.second)[i];
-    // Special case if it is the last node. Then the offset becomes
-    // the number of arcs
-    const int inArcOffsetGraph2 = ((node + 1) == graphDP2.inArcOffset.size())
-        ? graphDP2.inArcs.size()
-        : graphDP2.inArcOffset[node + 1];
-    const int outArcOffsetGraph2 = ((node + 1) == graphDP2.outArcOffset.size())
-        ? graphDP2.outArcs.size()
-        : graphDP2.outArcOffset[node + 1];
-
-    const int numArcsSecond = inOrOutArc
-        ? inArcOffsetGraph2 - graphDP2.inArcOffset[node]
-        : outArcOffsetGraph2 - graphDP2.outArcOffset[node];
-
-    (toExploreNumArcs.first)[i] = numArcsFirst;
-    (toExploreNumArcs.second)[i] = numArcsSecond;
-
-    // Even when numArcsFirst or numArcsSecond is 0 we have to consider
-    // the case when the other graph has arcs with epsilon label
-    if (numArcsFirst != 0 && numArcsSecond != 0) {
-      arcCrossProductOffset[i] = numArcsFirst * numArcsSecond;
-    } else if (numArcsFirst != 0 && numArcsSecond == 0) {
-      arcCrossProductOffset[i] = numArcsFirst;
-    } else if (numArcsFirst == 0 && numArcsSecond != 0) {
-      arcCrossProductOffset[i] = numArcsSecond;
-    } else {
-      arcCrossProductOffset[i] = 0;
-    }
-  }
-
-  return std::make_tuple(arcCrossProductOffset, toExploreNumArcs);
-}*/
