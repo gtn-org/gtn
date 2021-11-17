@@ -172,7 +172,20 @@ Comparisons
 .. py:function:: isomorphic(g1, g2)
 
   Checks if two graphs are isomorphic. This function will be extremely slow for
-  large graphs.
+  large graphs. For two graphs to be isomorphic, the arc labels, weights, and
+  structure must be the same.
+
+.. py:function:: rand_equivalent(g1, g2, num_samples=100, tol=1e-4, max_length=1000)
+
+  Checks if two graphs are equivalent using random samples. The more samples
+  used, the more accurate the result. Two graphs are equivalent if they accept
+  or transduce the same sequences with the same scores.
+
+  :param Graph g1: First input graph
+  :param Graph g2: Second input graph
+  :param int num_samples: Number of samples to use in the comparison
+  :param float tol: Tolerance in score differences between the two graphs
+  :param int max_length: The maximum length for samples
 
 
 Parallel
