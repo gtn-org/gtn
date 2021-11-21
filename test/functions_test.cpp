@@ -659,7 +659,7 @@ TEST_CASE("Test Epsilon Composition", "[functions.epsilon_compose]") {
     Graph expected;
     expected.addNode(true);
     expected.addNode(false, true);
-    expected.addArc(0, 0, 0, epsilon);
+    expected.addArc(1, 1, 0, epsilon);
     expected.addArc(0, 1, epsilon, 0, 1.0);
 
     CHECK(randEquivalent(compose(g1, g2), expected));
@@ -842,6 +842,28 @@ TEST_CASE("Test Epsilon Composition", "[functions.epsilon_compose]") {
     expected.addArc(0, 1, 2, 3, 4.2);
     expected.addArc(0, 1, 3, 3, 5.2);
 
+    CHECK(randEquivalent(compose(g1, g2), expected));
+  }
+
+  {
+    Graph g1;
+    g1.addNode(true);
+    g1.addNode(false, true);
+    g1.addNode();
+    g1.addArc(0, 1, 0);
+    g1.addArc(0, 2, epsilon);
+
+    Graph g2;
+    g2.addNode(true);
+    g2.addNode();
+    g2.addNode(false, true);
+    g2.addArc(0, 1, epsilon);
+    g2.addArc(1, 2, 0);
+
+    Graph expected;
+    expected.addNode(true);
+    expected.addNode(false, true);
+    expected.addArc(0, 1, 0);
     CHECK(randEquivalent(compose(g1, g2), expected));
   }
 }
