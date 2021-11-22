@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <queue>
-#include <iostream>
 
 #include "gtn/functions/compose.h"
 
@@ -45,12 +44,12 @@ inline size_t toIndex(const ExploreState& state, const Graph& g) {
 
 /* Check reachability via edges with epsilon labels */
 void epsilonReachable(
-    bool secondOrFirst,
     const Graph& first,
     const Graph& second,
     const ExploreState& state,
     std::vector<bool>& reachable,
     std::queue<ExploreState>& toExplore) {
+  bool secondOrFirst = state.followSecond;
   auto edges =
       secondOrFirst ? second.in(state.second) : first.in(state.first);
 
@@ -89,10 +88,9 @@ void epsilonReachable(
  * Find any state in the new composed graph which can reach
  * an accepting state.
  *
- * This is accomplished by iteatively following backwards pairwise arc paths
- * from the first and second graphs, where the arc paths have the invariant
- * that, for a particular arc pair, the olabel for the first arc == the ilabel
- * for the second arc.
+ * This is accomplished by iteratively following backwards pairwise arc paths
+ * from the first and second graphs where the olabel for the first arc equals
+ * the ilabel for the second arc.
  */
 auto findReachable(
     const Graph& first,
@@ -147,7 +145,7 @@ auto findReachable(
       }
     } else {
       // Check for reachable nodes via single epsilon transitions
-      epsilonReachable(curr.followSecond, first, second, curr, reachable, toExplore);
+      epsilonReachable(first, second, curr, reachable, toExplore);
     }
   }
   return reachable;
