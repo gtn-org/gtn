@@ -63,7 +63,6 @@ class CMakeBuild(build_ext):
             "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir,
             "-DPYTHON_EXECUTABLE=" + sys.executable,
             "-DPROJECT_SOURCE_DIR=" + srcdir,
-            "-DGTN_BUILD_EXPERIMENTAL=ON",
             "-DGTN_BUILD_PYTHON_BINDINGS=ON",
             "-DGTN_BUILD_EXAMPLES=OFF",
             "-DGTN_BUILD_BENCHMARKS=OFF",
