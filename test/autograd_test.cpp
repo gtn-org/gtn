@@ -190,57 +190,32 @@ TEST_CASE("Test Compose Grad", "[functions.compose (grad)]") {
 TEST_CASE("Test Compose Epsilon Grad", "[functions.compose_epsilon (grad)]") {
   Graph first;
   first.addNode(true);
+  first.addNode();
+  first.addNode();
+  first.addNode();
   first.addNode(false, true);
-  first.addArc(0, 0, 0, 3, 0);
-  first.addArc(0, 1, 1, 4, 0);
-  first.addArc(1, 1, 2, 5, 0);
-  first.addArc(0, 1, 2, gtn::epsilon, 0);
+  first.addArc(0, 1, 0, 0);
+  first.addArc(1, 2, 1, epsilon);
+  first.addArc(2, 3, 2, epsilon);
+  first.addArc(3, 4, 3, 3);
 
   Graph second;
   second.addNode(true);
   second.addNode();
   second.addNode();
   second.addNode(false, true);
-  second.addArc(0, 1, 3, 0, 0);
-  second.addArc(0, 1, 3, 1, 0);
-  second.addArc(0, 1, 4, 2, 0);
-  second.addArc(0, 1, gtn::epsilon, 2, 0.0); // idx 3
-  second.addArc(1, 2, 3, 0, 0);
-  second.addArc(1, 2, 4, 1, 0);
-  second.addArc(1, 2, 5, 2, 0);
-  second.addArc(1, 2, gtn::epsilon, 2, 0.0); // idx 7
-  second.addArc(2, 3, 4, 0, 0);
-  second.addArc(2, 3, 5, 1, 0);
-  second.addArc(2, 3, 5, 2, 0);
-  second.addArc(2, 3, gtn::epsilon, 2, 0.0); // idx 11
+  second.addArc(0, 1, 0, 3);
+  second.addArc(1, 2, epsilon, 4);
+  second.addArc(2, 3, 3, 0);
 
-  Graph expected =
-      loadTxt(std::stringstream("0\n"
-                                "6\n"
-                                "0 1 0 0 0\n"
-                                "0 1 0 1 0\n"
-                                "0 3 2 -1 0\n"
-                                "0 4 1 2 0\n"
-                                "1 2 0 0 0\n"
-                                "1 4 2 -1 0\n"
-                                "1 5 1 1 0\n"
-                                "2 5 2 -1 0\n"
-                                "2 6 1 0 0\n"
-                                "3 4 -1 2 0\n"
-                                "4 5 2 2 0\n"
-                                "4 5 -1 2 0\n"
-                                "5 6 2 1 0\n"
-                                "5 6 2 2 0\n"
-                                "5 6 -1 2 0\n"));
   Graph composed = compose(first, second);
-  CHECK(randEquivalent(composed, expected));
 
   backward(composed);
 
   auto& grad1 = first.grad();
   auto& grad2 = second.grad();
-  std::vector<float> expectedFirstGrad = {3, 3, 3, 3};
-  std::vector<float> expectedSecondGrad = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+  std::vector<float> expectedFirstGrad = {1, 1, 1, 1};
+  std::vector<float> expectedSecondGrad = {1, 1, 1};
   for (size_t i = 0; i < grad1.numArcs(); ++i) {
     CHECK(grad1.weights()[i] == expectedFirstGrad[i]);
   }

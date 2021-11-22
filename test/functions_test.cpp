@@ -619,8 +619,7 @@ TEST_CASE("Test Epsilon Composition", "[functions.epsilon_compose]") {
     expected.addNode(false, true);
     expected.addArc(0, 0, 0, epsilon, 1.0);
     expected.addArc(0, 1, 1, 3);
-
-    CHECK(equal(compose(g1, g2), expected));
+    CHECK(randEquivalent(compose(g1, g2), expected, 20));
   }
 
   {
@@ -642,7 +641,7 @@ TEST_CASE("Test Epsilon Composition", "[functions.epsilon_compose]") {
     expected.addArc(0, 1, 1, 3);
     expected.addArc(1, 1, epsilon, 0, 2.0);
 
-    CHECK(equal(compose(g1, g2), expected));
+    CHECK(randEquivalent(compose(g1, g2), expected));
   }
 
   // A series of tests making sure we handle redundant epsilon paths correctly
@@ -676,8 +675,10 @@ TEST_CASE("Test Epsilon Composition", "[functions.epsilon_compose]") {
 
     Graph expected;
     expected.addNode(true, true);
+    expected.addNode(false, true);
     expected.addArc(0, 0, 0, epsilon);
-    expected.addArc(0, 0, epsilon, 0);
+    expected.addArc(0, 1, epsilon, 0);
+    expected.addArc(1, 1, epsilon, 0);
 
     CHECK(randEquivalent(compose(g1, g2), expected));
   }
@@ -864,6 +865,34 @@ TEST_CASE("Test Epsilon Composition", "[functions.epsilon_compose]") {
     expected.addNode(true);
     expected.addNode(false, true);
     expected.addArc(0, 1, 0);
+    CHECK(randEquivalent(compose(g1, g2), expected));
+  }
+
+  {
+    Graph g1;
+    g1.addNode(true);
+    g1.addNode();
+    g1.addNode(false, true);
+    g1.addArc(0, 1, epsilon, epsilon, 1);
+    g1.addArc(0, 2, 0, 0, 3);
+    g1.addArc(1, 2, 0, 0, 1);
+
+    Graph g2;
+    g2.addNode(true);
+    g2.addNode();
+    g2.addNode(false, true);
+    g2.addArc(0, 1, epsilon, epsilon, 2);
+    g2.addArc(1, 2, 0, 0, 2);
+
+    Graph expected;
+    expected.addNode(true);
+    expected.addNode();
+    expected.addNode();
+    expected.addNode(false, true);
+    expected.addArc(0, 1, epsilon, epsilon, 3);
+    expected.addArc(0, 2, epsilon, epsilon, 2);
+    expected.addArc(1, 3, 0, 0, 3);
+    expected.addArc(2, 3, 0, 0, 5);
     CHECK(randEquivalent(compose(g1, g2), expected));
   }
 }
