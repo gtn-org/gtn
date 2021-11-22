@@ -52,11 +52,11 @@ void epsilonReachable(
   bool secondOrFirst = state.followSecond;
   auto edges =
       secondOrFirst ? second.in(state.second) : first.in(state.first);
+  auto isSorted =
+      secondOrFirst ? second.ilabelSorted() : first.olabelSorted();
 
   for (auto i : edges) {
     auto label = secondOrFirst ? second.ilabel(i) : first.olabel(i);
-    auto isSorted =
-        secondOrFirst ? second.ilabelSorted() : first.olabelSorted();
     if (label != epsilon) {
       if (isSorted) {
         break;
@@ -64,22 +64,20 @@ void epsilonReachable(
         continue;
       }
     }
-    auto un = secondOrFirst ? second.srcNode(i) : first.srcNode(i);
-    auto idx = secondOrFirst ? toIndex(state.first, un, first, false, false)
-                             : toIndex(un, state.second, first, false, false);
+
+    auto fn = secondOrFirst ? state.first : first.srcNode(i);
+    auto sn = secondOrFirst ? second.srcNode(i) : state.second;
+    auto idx = toIndex(fn, sn, first, false, false);
+
+    // If we haven't seen states before, explore them.
     if (!reachable[idx]) {
-      // If we haven't seen this state before, explore it.
-      secondOrFirst ? toExplore.emplace(state.first, un, false, false)
-                    : toExplore.emplace(un, state.second, false, false);
+      toExplore.emplace(fn, sn);
       reachable[idx] = true;
     }
-    if (!secondOrFirst && !reachable[idx + 1]) {
-      toExplore.emplace(un, state.second, true, false);
-      reachable[idx + 1] = true;
-    }
-    if (secondOrFirst && !reachable[idx + 2]) {
-      toExplore.emplace(state.first, un, false, true);
-      reachable[idx + 2] = true;
+    int offset = secondOrFirst ? 2 : 1;
+    if (!reachable[idx + offset]) {
+      toExplore.emplace(fn, sn, !secondOrFirst, secondOrFirst);
+      reachable[idx + offset] = true;
     }
   }
 }
@@ -102,7 +100,7 @@ auto findReachable(
   for (auto f : first.accept()) {
     for (auto s : second.accept()) {
       auto idx = toIndex(f, s, first, false, false);
-      toExplore.emplace(f, s, false, false);
+      toExplore.emplace(f, s);
       reachable[idx] = true;
 
       toExplore.emplace(f, s, true, false);
@@ -129,9 +127,10 @@ auto findReachable(
         auto idx = toIndex(un1, un2, first, false, false);
         if (!reachable[idx]) {
           // If we haven't seen this state before, explore it.
-          toExplore.emplace(un1, un2, false, false);
+          toExplore.emplace(un1, un2);
           reachable[idx] = true;
         }
+        // For non epsilon matches, explore the epsilon-following states.
         if (first.olabel(i) != epsilon) {
           if (!reachable[idx + 1]) {
             toExplore.emplace(un1, un2, true, false);
@@ -428,7 +427,8 @@ Graph compose(
 
   // Compose the graphs
   Graph ngraph(nullptr, {first, second});
-  // Flat representation of nodes in both graphs, indexed using toIndex
+  // Flat representation of nodes in both graphs for all three possible epsilon
+  // matched states, index with toIndex.
   std::vector<int> newNodes(3 * first.numNodes() * second.numNodes(), -1);
 
   std::queue<ExploreState> toExplore;
@@ -441,7 +441,7 @@ Graph compose(
       if (reachable[idx]) {
         newNodes[idx] =
             ngraph.addNode(true, first.isAccept(s1) && second.isAccept(s2));
-        toExplore.emplace(s1, s2, false, false);
+        toExplore.emplace(s1, s2);
       }
     }
   }
