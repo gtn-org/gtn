@@ -224,6 +224,23 @@ class Graph {
    */
   std::vector<int> labelsToVector(bool ilabel = true);
 
+  /**
+   * Move the graph to the CPU.
+   */
+  void cpu();
+
+  /**
+   * Move the graph to the GPU.
+   */
+  void cuda();
+
+  /**
+   * Returns true if the graph is on the GPU.
+   */
+  bool isCuda() {
+      return sharedGraph_->isCuda;
+  }
+
   /** @}*/
 
   /**
@@ -446,6 +463,9 @@ class Graph {
     // Some optional metadata about the graph
     bool ilabelSorted{false};
     bool olabelSorted{false};
+
+    bool isCuda{false};
+    int device{0}; // TODO
 
     std::mutex grad_lock;
   };

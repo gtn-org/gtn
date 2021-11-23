@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "graph.h"
+#include "cuda.h"
 
 namespace gtn {
 
@@ -190,6 +191,17 @@ std::vector<int> Graph::labelsToVector(bool ilabel) {
   std::vector<int> out(numArcs());
   labelsToArray(out.data(), ilabel);
   return out;
+}
+
+void Graph::cpu() {
+  sharedGraph_->isCuda = false;
+}
+
+void Graph::cuda() {
+  if (!cuda::isAvailable()) {
+    throw std::invalid_argument("[Graph::cuda] CUDA is not available.");
+  }
+  sharedGraph_->isCuda = true;
 }
 
 } // namespace gtn
