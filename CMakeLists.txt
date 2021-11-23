@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.5.1)
 
 project(gtn LANGUAGES CXX)
 
@@ -8,12 +8,13 @@ set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+find_package(CUDA 9.0)
 
 # ----------------------------- Configuration -----------------------------
 option(GTN_BUILD_TESTS "Build tests for gtn" ON)
 option(GTN_BUILD_BENCHMARKS "Build benchmarks for gtn" ON)
 option(GTN_BUILD_EXAMPLES "Build examples for gtn" ON)
-option(GTN_BUILD_EXPERIMENTAL "Build experimental for gtn" ON)
+option(GTN_BUILD_EXPERIMENTAL "Build experimental for gtn" ${CUDA_FOUND})
 option(GTN_BUILD_PYTHON_BINDINGS "Build python bindings for gtn" OFF)
 
 # ----------------------------- Dependencies -----------------------------

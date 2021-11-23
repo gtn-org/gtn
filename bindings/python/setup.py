@@ -10,6 +10,7 @@ LICENSE file in the root directory of this source tree.
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
 from setuptools import Extension, setup
@@ -29,10 +30,14 @@ class CMakeExtension(Extension):
         Extension.__init__(self, name, sources=[])
 
 
+def get_cmake():
+    return "cmake3" if shutil.which("cmake3") is not None else "cmake"
+
+
 class CMakeBuild(build_ext):
     def run(self):
         try:
-            out = subprocess.check_output(["cmake", "--version"])
+            out = subprocess.check_output([get_cmake(), "--version"])
         except OSError:
             raise RuntimeError(
                 "CMake must be installed to build the following extensions: "
@@ -58,7 +63,6 @@ class CMakeBuild(build_ext):
             "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir,
             "-DPYTHON_EXECUTABLE=" + sys.executable,
             "-DPROJECT_SOURCE_DIR=" + srcdir,
-            "-DGTN_BUILD_EXPERIMENTAL=ON",
             "-DGTN_BUILD_PYTHON_BINDINGS=ON",
             "-DGTN_BUILD_EXAMPLES=OFF",
             "-DGTN_BUILD_BENCHMARKS=OFF",
@@ -84,11 +88,12 @@ class CMakeBuild(build_ext):
         )
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
+        cmake = get_cmake()
         subprocess.check_call(
-            ["cmake", srcdir] + cmake_args, cwd=self.build_temp, env=env
+            [cmake, srcdir] + cmake_args, cwd=self.build_temp, env=env
         )
         subprocess.check_call(
-            ["cmake", "--build", "."] + build_args, cwd=self.build_temp
+            [cmake, "--build", "."] + build_args, cwd=self.build_temp
         )
 
 
