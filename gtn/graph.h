@@ -54,24 +54,6 @@ constexpr int epsilon{-1};
  * max operations and the score for a path is accumulated with addition.
  */
 class Graph {
- private:
-  struct Node {
-    Node(bool start, bool accept) : start(start), accept(accept){};
-    bool start{false};
-    bool accept{false};
-    std::vector<int> in;
-    std::vector<int> out;
-  };
-
-  struct Arc {
-    Arc(int srcNode, int dstNode, int ilabel, int olabel)
-        : srcNode(srcNode), dstNode(dstNode), ilabel(ilabel), olabel(olabel){};
-    int srcNode;
-    int dstNode;
-    int ilabel;
-    int olabel;
-  };
-
  public:
   using GradFunc =
       std::function<void(std::vector<Graph>& inputs, Graph& deltas)>;
@@ -124,19 +106,19 @@ class Graph {
 
   /** The number of arcs in the graph. */
   size_t numArcs() const {
-    return sharedGraph_->arcs.size();
+    return sharedGraph_->ilabels.size();
   };
   /** The number of nodes in the graph. */
   size_t numNodes() const {
-    return sharedGraph_->nodes.size();
+    return sharedGraph_->accept.size();
   };
   /** The number of starting nodes in the graph. */
   size_t numStart() const {
-    return sharedGraph_->start.size();
+    return sharedGraph_->startIds.size();
   };
   /** The number of accepting nodes in the graph. */
   size_t numAccept() const {
-    return sharedGraph_->accept.size();
+    return sharedGraph_->acceptIds.size();
   };
 
   /** Get the weight on a single arc graph.  */
@@ -237,7 +219,7 @@ class Graph {
   /**
    * Returns true if the graph is on the GPU.
    */
-  bool isCuda() {
+  bool isCuda() const {
       return sharedGraph_->isCuda;
   }
 
@@ -345,51 +327,64 @@ class Graph {
 
   /** Get the indices of the start nodes of the graph. */
   const std::vector<int>& start() const {
-    return sharedGraph_->start;
+    return sharedGraph_->startIds;
   };
   /** Get the indices of the accepting nodes of the graph. */
   const std::vector<int>& accept() const {
-    return sharedGraph_->accept;
+    return sharedGraph_->acceptIds;
   };
   /** Check if the `i`-th node is a start node. */
   bool isStart(size_t i) const {
-    return node(i).start;
+    return sharedGraph_->start[i];
   };
   /** Check if the `i`-th node is an accepting node. */
   bool isAccept(size_t i) const {
-    return node(i).accept;
+    return sharedGraph_->accept[i];
   };
   /** Make the the `i`-th node an accepting node. */
   void makeAccept(size_t i) {
-    auto& n = node(i);
-    if (!n.accept) {
-      sharedGraph_->accept.push_back(static_cast<int>(i));
-      n.accept = true;
+    if (!sharedGraph_->accept[i]) {
+      sharedGraph_->acceptIds.push_back(static_cast<int>(i));
+      sharedGraph_->accept[i] = true;
     }
   };
   /** The number of outgoing arcs from the `i`-th node. */
   size_t numOut(size_t i) const {
-    return node(i).out.size();
+    maybeCompile();
+    return sharedGraph_->outArcOffset[i+1] - sharedGraph_->outArcOffset[i];
   }
   /** Get the indices of outgoing arcs from the `i`-th node. */
-  const std::vector<int>& out(size_t i) const {
-    return node(i).out;
+  std::vector<int> out(size_t i) const {
+    maybeCompile();
+    auto start = sharedGraph_->outArcOffset[i];
+    auto end = sharedGraph_->outArcOffset[i + 1];
+    return std::vector<int>(
+        sharedGraph_->outArcs.begin() + start,
+        sharedGraph_->outArcs.begin() + end);
   }
   /** Get the index of the `j`-th outgoing arc from the `i`-th node. */
   int out(size_t i, size_t j) const {
-    return node(i).out[j];
+    maybeCompile();
+    return sharedGraph_->outArcs[sharedGraph_->outArcOffset[i] + j];
   }
   /** The number of incoming arcs to the `i`-th node. */
   size_t numIn(size_t i) const {
-    return node(i).in.size();
+    maybeCompile();
+    return sharedGraph_->inArcOffset[i+1] - sharedGraph_->inArcOffset[i];
   }
   /** Get the indices of incoming arcs to the `i`-th node. */
-  const std::vector<int>& in(size_t i) const {
-    return node(i).in;
+  std::vector<int> in(size_t i) const {
+    maybeCompile();
+    auto start = sharedGraph_->inArcOffset[i];
+    auto end = sharedGraph_->inArcOffset[i + 1];
+    return std::vector<int>(
+        sharedGraph_->inArcs.begin() + start,
+        sharedGraph_->inArcs.begin() + end);
   }
   /** Get the index of the `j`-th incoming arc to the `i`-th node. */
   size_t in(size_t i, size_t j) const {
-    return node(i).in[j];
+    maybeCompile();
+    return sharedGraph_->inArcs[sharedGraph_->inArcOffset[i] + j];
   }
 
   /** @}*/
@@ -398,25 +393,25 @@ class Graph {
    *  @{
    */
 
-  /** The destination node of the `i`-th arc. */
-  int srcNode(size_t i) const {
-    return arc(i).srcNode;
-  }
   /** The source node of the `i`-th arc. */
+  int srcNode(size_t i) const {
+    return sharedGraph_->srcNodes[i];
+  }
+  /** The destination node of the `i`-th arc. */
   int dstNode(size_t i) const {
-    return arc(i).dstNode;
+    return sharedGraph_->dstNodes[i];
   }
   /** The label of the `i`-th arc (use this for acceptors). */
   int label(size_t i) const {
-    return arc(i).ilabel;
+    return sharedGraph_->ilabels[i];
   }
   /** The input label of the `i`-th arc. */
   int ilabel(size_t i) const {
-    return arc(i).ilabel;
+    return sharedGraph_->ilabels[i];
   }
   /** The output label of the `i`-th arc. */
   int olabel(size_t i) const {
-    return arc(i).olabel;
+    return sharedGraph_->olabels[i];
   }
 
   /** The weight of the `i`-th arc. */
@@ -436,33 +431,44 @@ class Graph {
   size_t addArc(size_t srcNode, size_t dstNode, int label, float) = delete;
   size_t addArc(size_t srcNode, size_t dstNode, int label, double) = delete;
 
-  const Node& node(size_t i) const {
-    // NB: assert gets stripped at in release mode
-    assert(i >= 0 && i < numNodes());
-    return sharedGraph_->nodes[i];
-  }
-  Node& node(size_t i) {
-    return const_cast<Node&>(static_cast<const Graph&>(*this).node(i));
-  }
-  const Arc& arc(size_t i) const {
-    // NB: assert gets stripped at in release mode
-    assert(i >= 0 && i < numArcs());
-    return sharedGraph_->arcs[i];
-  }
-  Arc& arc(size_t i) {
-    return const_cast<Arc&>(static_cast<const Graph&>(*this).arc(i));
+  // Semantically const
+  void compile() const;
+
+  // Semantically const
+  void maybeCompile() const {
+    if (!sharedGraph_->compiled) {
+      compile();
+    }
   }
 
   struct SharedGraph {
     /// Underlying graph data
-    std::vector<Arc> arcs;
-    std::vector<Node> nodes;
-    std::vector<int> start;
-    std::vector<int> accept;
+    std::vector<int> startIds;
+    std::vector<int> acceptIds;
+    std::vector<bool> accept;
+    std::vector<bool> start;
+
+    // One value per node - i-th value corresponds to i-th node
+    // Last element is the total number of arcs, so that
+    // each element and its neighbor forms a range
+    std::vector<int> inArcOffset;
+    std::vector<int> outArcOffset;
+
+    // One value per arc
+    std::vector<int> inArcs;
+    std::vector<int> outArcs;
+
+    // One value per arc
+    // i-th value corresponds to i-th arc
+    std::vector<int> ilabels;
+    std::vector<int> olabels;
+    std::vector<int> srcNodes;
+    std::vector<int> dstNodes;
 
     // Some optional metadata about the graph
     bool ilabelSorted{false};
     bool olabelSorted{false};
+    bool compiled{false};
 
     bool isCuda{false};
     int device{0}; // TODO

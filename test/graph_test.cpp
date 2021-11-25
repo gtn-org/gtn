@@ -52,6 +52,12 @@ TEST_CASE("Test Graph", "[graph]") {
   CHECK(g.numArcs() == 5);
   CHECK(g.numOut(0) == 2);
   CHECK(g.numIn(1) == 2);
+  for (int i = 0; i < g.numIn(1); ++i) {
+    CHECK(g.in(1)[i] == g.in(1, i));
+  }
+  for (int i = 0; i < g.numOut(0); ++i) {
+    CHECK(g.out(0)[i] == g.out(0, i));
+  }
 
   // If we (shallow) copy the graph it should have the same structure.
   Graph g_copy = g;
@@ -178,7 +184,7 @@ TEST_CASE("Test copy", "[Graph::deepCopy]") {
   CHECK(!equal(copied, graph));
 }
 
-TEST_CASE("Test arc weight get/set", "[graph setWeight weights]") {
+TEST_CASE("Test arc weight get/set", "[Graph.weights]") {
   std::vector<float> l = {1.1f, 2.2f, 3.3f, 4.4f};
 
   Graph g;
@@ -347,8 +353,10 @@ TEST_CASE("Test sort", "[Graph::arcSort]") {
   g.arcSort();
   auto ilabelCmp = [&g](int a, int b) { return g.ilabel(a) < g.ilabel(b); };
   for (auto n = 0; n < g.numNodes(); ++n) {
-    CHECK(std::is_sorted(g.in(n).begin(), g.in(n).end(), ilabelCmp));
-    CHECK(std::is_sorted(g.out(n).begin(), g.out(n).end(), ilabelCmp));
+    auto arcs = g.in(n);
+    CHECK(std::is_sorted(arcs.begin(), arcs.end(), ilabelCmp));
+    arcs = g.out(n);
+    CHECK(std::is_sorted(arcs.begin(), arcs.end(), ilabelCmp));
   }
   CHECK(g.ilabelSorted());
   CHECK(!g.olabelSorted());
@@ -357,8 +365,10 @@ TEST_CASE("Test sort", "[Graph::arcSort]") {
   g.arcSort(true);
   auto olabelCmp = [&g](int a, int b) { return g.olabel(a) < g.olabel(b); };
   for (auto n = 0; n < g.numNodes(); ++n) {
-    CHECK(std::is_sorted(g.in(n).begin(), g.in(n).end(), olabelCmp));
-    CHECK(std::is_sorted(g.out(n).begin(), g.out(n).end(), olabelCmp));
+    auto arcs = g.in(n);
+    CHECK(std::is_sorted(arcs.begin(), arcs.end(), olabelCmp));
+    arcs = g.out(n);
+    CHECK(std::is_sorted(arcs.begin(), arcs.end(), olabelCmp));
   }
   CHECK(!g.ilabelSorted());
   CHECK(g.olabelSorted());

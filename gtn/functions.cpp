@@ -279,8 +279,9 @@ Graph remove(const Graph& g, int ilabel, int olabel) {
   std::vector<int> nodes(g.numNodes(), -1);
   Graph graph(gradFunc, {g});
   for (auto n = 0; n < g.numNodes(); ++n) {
+    auto arcs = g.in(n);
     if (g.isStart(n) ||
-        !std::all_of(g.in(n).begin(), g.in(n).end(), label_match)) {
+        !std::all_of(arcs.begin(), arcs.end(), label_match)) {
       nodes[n] = graph.addNode(g.isStart(n));
     }
   }
