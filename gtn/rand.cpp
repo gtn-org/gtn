@@ -102,7 +102,6 @@ bool randEquivalent(
 
     auto isEmptyG1 = equal(composedG1, Graph{});
     auto isEmptyG2 = equal(composedG2, Graph{});
-
     // Only one of the graphs is empty
     if (isEmptyG1 != isEmptyG2) {
       return false;
