@@ -8,10 +8,8 @@
 #include <algorithm>
 #include <stdexcept>
 #include <utility>
-#include <iostream>
 
 #include "graph.h"
-#include "cuda.h"
 
 namespace gtn {
 
@@ -34,6 +32,7 @@ Graph::Graph(bool calcGrad /* = true */) {
 
 int Graph::addNode(bool start /* = false */, bool accept /* = false */) {
   int idx = static_cast<int>(numNodes());
+  sharedGraph_->numNodes++;
   sharedGraph_->start.push_back(start);
   sharedGraph_->accept.push_back(accept);
   if (start) {
@@ -60,6 +59,7 @@ size_t Graph::addArc(
     float weight /* = 0 */) {
   assert(ilabel >= epsilon && olabel >= epsilon);
   int idx = static_cast<int>(numArcs());
+  sharedGraph_->numArcs++;
   sharedWeights_->push_back(weight);
   sharedGraph_->ilabels.push_back(ilabel);
   sharedGraph_->olabels.push_back(olabel);
@@ -201,6 +201,10 @@ std::uintptr_t Graph::id() {
 
 Graph Graph::deepCopy(const Graph& src) {
   Graph out(src.calcGrad());
+  out.sharedGraph_->numNodes = src.numNodes();
+  out.sharedGraph_->numArcs = src.numArcs();
+  out.sharedGraph_->compiled = src.sharedGraph_->compiled;
+  out.sharedGraph_->isCuda = src.isCuda();
   out.sharedGraph_->start = src.sharedGraph_->start;
   out.sharedGraph_->startIds = src.sharedGraph_->startIds;
   out.sharedGraph_->accept = src.sharedGraph_->accept;
@@ -214,6 +218,7 @@ Graph Graph::deepCopy(const Graph& src) {
   out.sharedGraph_->srcNodes = src.sharedGraph_->srcNodes;
   out.sharedGraph_->dstNodes = src.sharedGraph_->dstNodes;
   *out.sharedWeights_ = *src.sharedWeights_;
+  // TODO deviceData
   return out;
 }
 
@@ -261,6 +266,7 @@ void Graph::labelsToArray(int* out, bool ilabel) {
     throw std::invalid_argument(
       "[Graph::labelsToArray] Labels can only be retrieved on CPU graphs");
   }
+  // TODO copy the vectors/arrays directly here
   for (int i = 0; i < numArcs(); ++i) {
     out[i] = ilabel ? this->ilabel(i) : olabel(i);
   }
@@ -270,17 +276,6 @@ std::vector<int> Graph::labelsToVector(bool ilabel) {
   std::vector<int> out(numArcs());
   labelsToArray(out.data(), ilabel);
   return out;
-}
-
-void Graph::cpu() {
-  sharedGraph_->isCuda = false;
-}
-
-void Graph::cuda() {
-  if (!cuda::isAvailable()) {
-    throw std::invalid_argument("[Graph::cuda] CUDA is not available.");
-  }
-  sharedGraph_->isCuda = true;
 }
 
 } // namespace gtn

@@ -106,11 +106,11 @@ class Graph {
 
   /** The number of arcs in the graph. */
   size_t numArcs() const {
-    return sharedGraph_->ilabels.size();
+    return sharedGraph_->numArcs;
   };
   /** The number of nodes in the graph. */
   size_t numNodes() const {
-    return sharedGraph_->accept.size();
+    return sharedGraph_->numNodes;
   };
   /** The number of starting nodes in the graph. */
   size_t numStart() const {
@@ -209,12 +209,12 @@ class Graph {
   /**
    * Move the graph to the CPU.
    */
-  void cpu();
+  Graph cpu();
 
   /**
    * Move the graph to the GPU.
    */
-  void cuda();
+  Graph cuda();
 
   /**
    * Returns true if the graph is on the GPU.
@@ -441,12 +441,37 @@ class Graph {
     }
   }
 
+  // Contains device data when GPU is enabled
+  struct GraphGPU {
+
+    int* start{nullptr};
+    int* accept;
+    int* outArcOffset;
+    int* inArcOffset;
+
+    int* inArcs;
+    int* outArcs;
+    int* olabels;
+    int* ilabels;
+    int* srcNodes;
+    int* dstNodes;
+    float* weights;
+
+    void allocate(size_t numNodes, size_t numArcs);
+
+    ~GraphGPU();
+    // TODO copy assignment constructor
+  };
+
   struct SharedGraph {
     /// Underlying graph data
+    size_t numNodes{0};
+    size_t numArcs{0};
+
     std::vector<int> startIds;
     std::vector<int> acceptIds;
-    std::vector<bool> accept;
-    std::vector<bool> start;
+    std::vector<int> accept;
+    std::vector<int> start;
 
     // One value per node - i-th value corresponds to i-th node
     // Last element is the total number of arcs, so that
@@ -472,6 +497,7 @@ class Graph {
 
     bool isCuda{false};
     int device{0}; // TODO
+    GraphGPU deviceData;
 
     std::mutex grad_lock;
   };
