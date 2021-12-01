@@ -55,6 +55,7 @@ constexpr int epsilon{-1};
  */
 class Graph {
  public:
+
   using GradFunc =
       std::function<void(std::vector<Graph>& inputs, Graph& deltas)>;
   Graph(GradFunc gradFunc, std::vector<Graph> inputs);
@@ -212,15 +213,30 @@ class Graph {
   Graph cpu();
 
   /**
-   * Move the graph to the GPU.
+   * Move the graph to currently active GPU.
    */
   Graph cuda();
+
+  /**
+   * Move the graph to GPU specified by `device`.
+   */
+  Graph cuda(int device);
 
   /**
    * Returns true if the graph is on the GPU.
    */
   bool isCuda() const {
-      return sharedGraph_->isCuda;
+    return sharedGraph_->isCuda;
+  }
+
+  /*
+   * Get the GPU device the graph is on.
+   */
+  int device() const {
+    if (!isCuda()) {
+      throw std::invalid_argument("[Graph::device] Graph is not on the GPU");
+    }
+    return sharedGraph_->device;
   }
 
   /** @}*/
@@ -459,8 +475,9 @@ class Graph {
 
     void allocate(size_t numNodes, size_t numArcs);
 
+    void deepCopy(
+        const GraphGPU& other, size_t numNodes, size_t numArcs, int device);
     ~GraphGPU();
-    // TODO copy assignment constructor
   };
 
   struct SharedGraph {
@@ -495,8 +512,9 @@ class Graph {
     bool olabelSorted{false};
     bool compiled{false};
 
+    // GPU data and metadata
     bool isCuda{false};
-    int device{0}; // TODO
+    int device{0};
     GraphGPU deviceData;
 
     std::mutex grad_lock;

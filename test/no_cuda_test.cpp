@@ -20,4 +20,5 @@ TEST_CASE("Test Graph CUDA", "[Graph.cuda]") {
     CHECK(!g.isCuda());
     CHECK(equal(g.cpu(), g));
     CHECK_THROWS(g.cuda());
+    CHECK_THROWS(g.device());
 }

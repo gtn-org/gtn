@@ -205,6 +205,7 @@ Graph Graph::deepCopy(const Graph& src) {
   out.sharedGraph_->numArcs = src.numArcs();
   out.sharedGraph_->compiled = src.sharedGraph_->compiled;
   out.sharedGraph_->isCuda = src.isCuda();
+  out.sharedGraph_->device = src.device();
   out.sharedGraph_->start = src.sharedGraph_->start;
   out.sharedGraph_->startIds = src.sharedGraph_->startIds;
   out.sharedGraph_->accept = src.sharedGraph_->accept;
@@ -218,7 +219,13 @@ Graph Graph::deepCopy(const Graph& src) {
   out.sharedGraph_->srcNodes = src.sharedGraph_->srcNodes;
   out.sharedGraph_->dstNodes = src.sharedGraph_->dstNodes;
   *out.sharedWeights_ = *src.sharedWeights_;
-  // TODO deviceData
+  if (out.isCuda()) {
+    out.sharedGraph_->deviceData.deepCopy(
+        src.sharedGraph_->deviceData,
+        out.numNodes(),
+        out.numArcs(),
+        src.device());
+  }
   return out;
 }
 

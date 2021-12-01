@@ -22,6 +22,20 @@ void setDevice(int device);
 
 namespace detail {
 
+// Resource manager for switching devices
+class DeviceManager {
+ public:
+  DeviceManager(int device) :
+    device_(getDevice()) {
+      setDevice(device);
+  }
+  ~DeviceManager() {
+    setDevice(device_);
+  }
+ private:
+  int device_;
+};
+
 #if defined(CUDA)
 void cudaCheck(cudaError_t err, const char* file, int line);
 #endif

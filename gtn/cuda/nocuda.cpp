@@ -10,9 +10,11 @@ Graph Graph::cuda() {
   throw std::logic_error("[Graph::cuda] CUDA not available.");
 }
 
-Graph::GraphGPU::GraphGPU(const Graph::SharedGraph& g) { }
+void Graph::GraphGPU::allocate(size_t numNodes, size_t numArcs) { }
 
-GraphGPU(const GraphGpu& other) { }
+void Graph::GraphGPU::deepCopy(
+    const Graph::GraphGPU& other, size_t numNodes, size_t numArcs, int device) {
+}
 
 Graph::GraphGPU::~GraphGPU() { }
 

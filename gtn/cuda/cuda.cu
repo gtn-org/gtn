@@ -7,21 +7,29 @@ namespace gtn {
 
 namespace {
 
-void copyHostDevice(int* dptr, const std::vector<int>& hvec, size_t size) {
+void copyDeviceDevice(int* dst, const int* src, size_t size) {
   CUDA_CHECK(cudaMemcpyAsync(
-    static_cast<void*>(dptr),
-    static_cast<const void*>(hvec.data()),
+    static_cast<void*>(dst),
+    static_cast<const void*>(src),
     size * sizeof(int),
-    cudaMemcpyHostToDevice));
+    cudaMemcpyDefault));
 }
 
-void copyDeviceHost(std::vector<int>& hvec, const int* dptr, size_t size) {
-  hvec.resize(size);
-  CUDA_CHECK(cudaMemcpy(
-    static_cast<void*>(hvec.data()),
-    static_cast<const void*>(dptr),
+void copyHostDevice(int* dst, const std::vector<int>& src, size_t size) {
+  CUDA_CHECK(cudaMemcpyAsync(
+    static_cast<void*>(dst),
+    static_cast<const void*>(src.data()),
     size * sizeof(int),
-    cudaMemcpyDeviceToHost));
+    cudaMemcpyDefault));
+}
+
+void copyDeviceHost(std::vector<int>& dst, const int* src, size_t size) {
+  dst.resize(size);
+  CUDA_CHECK(cudaMemcpy(
+    static_cast<void*>(dst.data()),
+    static_cast<const void*>(src),
+    size * sizeof(int),
+    cudaMemcpyDefault));
 }
 
 } // namespace
@@ -43,8 +51,8 @@ Graph Graph::cpu() {
   auto& hd = *(g.sharedGraph_);
   copyDeviceHost(hd.start, dd.start, g.numNodes());
   copyDeviceHost(hd.accept, dd.accept, g.numNodes());
-  copyDeviceHost(hd.inArcOffset, dd.inArcOffset, g.numNodes());
-  copyDeviceHost(hd.outArcOffset, dd.outArcOffset, g.numNodes());
+  copyDeviceHost(hd.inArcOffset, dd.inArcOffset, g.numNodes() + 1);
+  copyDeviceHost(hd.outArcOffset, dd.outArcOffset, g.numNodes() + 1);
   copyDeviceHost(hd.inArcs, dd.inArcs, g.numArcs());
   copyDeviceHost(hd.outArcs, dd.outArcs, g.numArcs());
   copyDeviceHost(hd.ilabels, dd.ilabels, g.numArcs());
@@ -57,13 +65,13 @@ Graph Graph::cpu() {
     static_cast<void*>(g.weights()),
     static_cast<const void*>(dd.weights),
     g.numArcs() * sizeof(int),
-    cudaMemcpyDeviceToHost));
+    cudaMemcpyDefault));
   return g;
 }
 
-Graph Graph::cuda() {
+Graph Graph::cuda(int device_) {
   // No-op if already on GPU
-  if (sharedGraph_->isCuda) {
+  if (isCuda() && device() == device_) {
     return *this;
   }
   maybeCompile();
@@ -76,40 +84,71 @@ Graph Graph::cuda() {
   g.sharedGraph_->numNodes = this->numNodes();
   g.sharedGraph_->numArcs = this->numArcs(); 
   g.setCalcGrad(this->calcGrad());
+  g.sharedGraph_->device = device_;
 
   auto& hd = *(this->sharedGraph_);
   auto& dd = g.sharedGraph_->deviceData;
+  cuda::detail::DeviceManager dm(device_);
   dd.allocate(g.numNodes(), g.numArcs());
-  copyHostDevice(dd.start, hd.start, g.numNodes());
-  copyHostDevice(dd.accept, hd.accept, g.numNodes());
-  copyHostDevice(dd.inArcOffset, hd.inArcOffset, g.numNodes());
-  copyHostDevice(dd.outArcOffset, hd.outArcOffset, g.numNodes());
-  copyHostDevice(dd.inArcs, hd.inArcs, g.numArcs());
-  copyHostDevice(dd.outArcs, hd.outArcs, g.numArcs());
-  copyHostDevice(dd.ilabels, hd.ilabels, g.numArcs());
-  copyHostDevice(dd.olabels, hd.olabels, g.numArcs());
-  copyHostDevice(dd.srcNodes, hd.srcNodes, g.numArcs());
-  copyHostDevice(dd.dstNodes, hd.dstNodes, g.numArcs());
-  CUDA_CHECK(cudaMemcpyAsync(
-    static_cast<void*>(dd.weights),
-    static_cast<const void*>(this->weights()),
-    g.numArcs() * sizeof(float),
-    cudaMemcpyHostToDevice));
+  if (!isCuda()) {
+    copyHostDevice(dd.start, hd.start, g.numNodes());
+    copyHostDevice(dd.accept, hd.accept, g.numNodes());
+    copyHostDevice(dd.inArcOffset, hd.inArcOffset, g.numNodes() + 1);
+    copyHostDevice(dd.outArcOffset, hd.outArcOffset, g.numNodes() + 1);
+    copyHostDevice(dd.inArcs, hd.inArcs, g.numArcs());
+    copyHostDevice(dd.outArcs, hd.outArcs, g.numArcs());
+    copyHostDevice(dd.ilabels, hd.ilabels, g.numArcs());
+    copyHostDevice(dd.olabels, hd.olabels, g.numArcs());
+    copyHostDevice(dd.srcNodes, hd.srcNodes, g.numArcs());
+    copyHostDevice(dd.dstNodes, hd.dstNodes, g.numArcs());
+    CUDA_CHECK(cudaMemcpyAsync(
+      static_cast<void*>(dd.weights),
+      static_cast<const void*>(this->weights()),
+      g.numArcs() * sizeof(float),
+      cudaMemcpyDefault));
+  } else {
+    dd.deepCopy(hd.deviceData, g.numNodes(), g.numArcs(), device_);
+  }
   return g;
 }
 
+Graph Graph::cuda() {
+  return cuda(cuda::getDevice());
+}
+
 void Graph::GraphGPU::allocate(size_t numNodes, size_t numArcs) {
-  CUDA_CHECK(cudaMalloc((void **)(&start), sizeof(int) * numNodes));
-  CUDA_CHECK(cudaMalloc((void **)(&accept), sizeof(int) * numNodes));
-  CUDA_CHECK(cudaMalloc((void **)(&inArcOffset), sizeof(int) * numNodes));
-  CUDA_CHECK(cudaMalloc((void **)(&outArcOffset), sizeof(int) * numNodes));
-  CUDA_CHECK(cudaMalloc((void **)(&inArcs), sizeof(int) * numArcs));
-  CUDA_CHECK(cudaMalloc((void **)(&outArcs), sizeof(int) * numArcs));
-  CUDA_CHECK(cudaMalloc((void **)(&ilabels), sizeof(int) * numArcs));
-  CUDA_CHECK(cudaMalloc((void **)(&olabels), sizeof(int) * numArcs));
-  CUDA_CHECK(cudaMalloc((void **)(&srcNodes), sizeof(int) * numArcs));
-  CUDA_CHECK(cudaMalloc((void **)(&dstNodes), sizeof(int) * numArcs));
-  CUDA_CHECK(cudaMalloc((void **)(&weights), sizeof(float) * numArcs));
+  CUDA_CHECK(cudaMalloc((void**)(&start), sizeof(int) * numNodes));
+  CUDA_CHECK(cudaMalloc((void**)(&accept), sizeof(int) * numNodes));
+  CUDA_CHECK(cudaMalloc((void**)(&inArcOffset), sizeof(int) * (numNodes + 1)));
+  CUDA_CHECK(cudaMalloc((void**)(&outArcOffset), sizeof(int) * (numNodes + 1)));
+  CUDA_CHECK(cudaMalloc((void**)(&inArcs), sizeof(int) * numArcs));
+  CUDA_CHECK(cudaMalloc((void**)(&outArcs), sizeof(int) * numArcs));
+  CUDA_CHECK(cudaMalloc((void**)(&ilabels), sizeof(int) * numArcs));
+  CUDA_CHECK(cudaMalloc((void**)(&olabels), sizeof(int) * numArcs));
+  CUDA_CHECK(cudaMalloc((void**)(&srcNodes), sizeof(int) * numArcs));
+  CUDA_CHECK(cudaMalloc((void**)(&dstNodes), sizeof(int) * numArcs));
+  CUDA_CHECK(cudaMalloc((void**)(&weights), sizeof(float) * numArcs));
+}
+
+void Graph::GraphGPU::deepCopy(
+    const Graph::GraphGPU& other, size_t numNodes, size_t numArcs, int device) {
+  cuda::detail::DeviceManager dm(device);
+  allocate(numNodes, numArcs);
+  copyDeviceDevice(start, other.start, numNodes);
+  copyDeviceDevice(accept, other.accept, numNodes);
+  copyDeviceDevice(inArcOffset, other.inArcOffset, numNodes + 1);
+  copyDeviceDevice(outArcOffset, other.outArcOffset, numNodes + 1);
+  copyDeviceDevice(inArcs, other.inArcs, numArcs);
+  copyDeviceDevice(outArcs, other.outArcs, numArcs);
+  copyDeviceDevice(ilabels, other.ilabels, numArcs);
+  copyDeviceDevice(olabels, other.olabels, numArcs);
+  copyDeviceDevice(srcNodes, other.srcNodes, numArcs);
+  copyDeviceDevice(dstNodes, other.dstNodes, numArcs);
+  CUDA_CHECK(cudaMemcpyAsync(
+    static_cast<void*>(weights),
+    static_cast<const void*>(other.weights),
+    numArcs * sizeof(float),
+    cudaMemcpyDeviceToDevice));
 }
 
 Graph::GraphGPU::~GraphGPU() {
@@ -130,11 +169,7 @@ Graph::GraphGPU::~GraphGPU() {
 namespace cuda {
 
 bool isAvailable() {
-#if defined(CUDA)
   return deviceCount() > 0;
-#else
-  return false;
-#endif
 }
 
 int deviceCount() {
