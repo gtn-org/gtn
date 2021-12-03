@@ -20,6 +20,9 @@ Graph::Graph(GradFunc gradFunc, std::vector<Graph> inputs) {
   for (auto& g : inputs) {
     sharedGrad_->calcGrad |= g.calcGrad();
   }
+  if (!inputs.empty() && inputs[0].isCuda()) {
+    sharedGraph_ = cuda(inputs[0].device()).sharedGraph_;
+  }
   if (calcGrad()) {
     sharedGrad_->gradFunc = std::move(gradFunc);
     sharedGrad_->inputs = std::move(inputs);
@@ -139,6 +142,10 @@ const Graph& Graph::grad() const {
 }
 
 void Graph::addGrad(std::vector<float>&& other) {
+  if (isCuda()) {
+    throw std::logic_error(
+      "[Graph::addGrad] Use addGrad(float*) for GPU graphs.");
+  }
   if (calcGrad()) {
     if (other.size() != numArcs()) {
       throw std::logic_error("[Graph::addGrad] Invalid grad size.");
@@ -157,6 +164,10 @@ void Graph::addGrad(std::vector<float>&& other) {
 }
 
 void Graph::addGrad(const std::vector<float>& other) {
+  if (isCuda()) {
+    throw std::logic_error(
+      "[Graph::addGrad] Use addGrad(float*) for GPU graphs.");
+  }
   if (calcGrad()) {
     if (other.size() != numArcs()) {
       throw std::logic_error("[Graph::addGrad] Invalid grad size.");
@@ -205,7 +216,6 @@ Graph Graph::deepCopy(const Graph& src) {
   out.sharedGraph_->numArcs = src.numArcs();
   out.sharedGraph_->compiled = src.sharedGraph_->compiled;
   out.sharedGraph_->isCuda = src.isCuda();
-  out.sharedGraph_->device = src.device();
   out.sharedGraph_->start = src.sharedGraph_->start;
   out.sharedGraph_->startIds = src.sharedGraph_->startIds;
   out.sharedGraph_->accept = src.sharedGraph_->accept;
@@ -220,10 +230,9 @@ Graph Graph::deepCopy(const Graph& src) {
   out.sharedGraph_->dstNodes = src.sharedGraph_->dstNodes;
   *out.sharedWeights_ = *src.sharedWeights_;
   if (out.isCuda()) {
+    out.sharedGraph_->device = src.device();
     out.sharedGraph_->deviceData.deepCopy(
         src.sharedGraph_->deviceData,
-        out.numNodes(),
-        out.numArcs(),
         src.device());
   }
   return out;

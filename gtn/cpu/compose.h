@@ -13,7 +13,7 @@
 #include "gtn/graph.h"
 
 namespace gtn {
-namespace detail {
+namespace cpu {
 
 class ArcMatcher {
  public:
@@ -91,5 +91,5 @@ Graph compose(
     const Graph& g2,
     std::shared_ptr<ArcMatcher> matcher);
 
-} // namespace detail
+} // namespace cpu
 } // namespace gtn

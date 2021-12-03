@@ -7,12 +7,11 @@
 
 #include <algorithm>
 #include <queue>
-#include <iostream>
 
-#include "gtn/functions/compose.h"
+#include "gtn/cpu/compose.h"
 
 namespace gtn {
-namespace detail {
+namespace cpu {
 namespace {
 
 struct ExploreState {
@@ -65,7 +64,6 @@ void epsilonReachable(
         continue;
       }
     }
-
     auto fn = secondOrFirst ? state.first : first.srcNode(i);
     auto sn = secondOrFirst ? second.srcNode(i) : state.second;
     auto idx = toIndex(fn, sn, first, false, false);
@@ -347,6 +345,8 @@ void DoublySortedMatcher::match(
     bool matchIn /* = false */) {
   searchV_ = matchIn ? g1_.in(lnode) : g1_.out(lnode);
   queryV_ = matchIn ? g2_.in(rnode) : g2_.out(rnode);
+
+  searchG1_ = searchV_.size() > queryV_.size();
   if (!searchG1_) {
     // Swap based on the graph we are searching
     std::swap(searchV_, queryV_);
@@ -538,5 +538,5 @@ Graph compose(
   return ngraph;
 }
 
-} // namespace detail
+} // namespace cpu
 } // namespace gtn

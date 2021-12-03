@@ -10,10 +10,10 @@
 #include <limits>
 #include <queue>
 
-#include "gtn/functions/shortest.h"
+#include "gtn/cpu/shortest.h"
 
 namespace gtn {
-namespace detail {
+namespace cpu {
 
 namespace {
 
@@ -271,5 +271,5 @@ Graph shortestPath(const Graph& g) {
   return out;
 }
 
-} // namespace detail
+} // namespace cpu
 } // namespace gtn

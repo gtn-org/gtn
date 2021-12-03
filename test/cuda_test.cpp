@@ -23,6 +23,8 @@ TEST_CASE("Test Graph CUDA", "[Graph.cuda]") {
   {
     Graph g;
     CHECK(!g.isCuda());
+    // Moving empty graphs works
+    CHECK(equal(g.cuda().cpu(), g));
     g.addNode(true);
     g.addNode(false, true);
     g.addArc(0, 1, 0, 1, 0.5);
@@ -47,6 +49,17 @@ TEST_CASE("Test Graph CUDA", "[Graph.cuda]") {
     auto ghost = gdev.cpu();
     CHECK(!ghost.isCuda());
     CHECK(equal(ghost, g));
+  }
+
+  {
+    Graph g;
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0);
+    auto gdev = g.cuda();
+    auto gout = Graph(nullptr, {gdev});
+    CHECK(gout.isCuda());
+    CHECK(gout.device() == gdev.device());
   }
 
   {

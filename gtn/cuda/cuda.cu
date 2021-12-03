@@ -1,5 +1,4 @@
 #include <sstream>
-#include <iostream>
 
 #include "cuda.h"
 
@@ -34,21 +33,20 @@ void copyDeviceHost(std::vector<int>& dst, const int* src, size_t size) {
 
 } // namespace
 
-Graph Graph::cpu() {
+Graph Graph::cpu() const {
+
   // No-op if already on CPU
   if (!sharedGraph_->isCuda) {
     return *this;
   }
   Graph g;
-  g.sharedGraph_->startIds = this->start();
-  g.sharedGraph_->acceptIds = this->accept();
-  g.sharedGraph_->isCuda = false;
-  g.sharedGraph_->compiled = true;
-  g.sharedGraph_->numNodes = this->numNodes();
-  g.sharedGraph_->numArcs = this->numArcs();
+  auto& hd = *(g.sharedGraph_);
+  hd.isCuda = false;
+  hd.compiled = true;
   g.setCalcGrad(this->calcGrad());
   auto& dd = this->sharedGraph_->deviceData;
-  auto& hd = *(g.sharedGraph_);
+  hd.numNodes = dd.numNodes;
+  hd.numArcs = dd.numArcs;
   copyDeviceHost(hd.start, dd.start, g.numNodes());
   copyDeviceHost(hd.accept, dd.accept, g.numNodes());
   copyDeviceHost(hd.inArcOffset, dd.inArcOffset, g.numNodes() + 1);
@@ -59,6 +57,17 @@ Graph Graph::cpu() {
   copyDeviceHost(hd.olabels, dd.olabels, g.numArcs());
   copyDeviceHost(hd.srcNodes, dd.srcNodes, g.numArcs());
   copyDeviceHost(hd.dstNodes, dd.dstNodes, g.numArcs());
+  // Get the indices of the start and accept nodes
+  for (int i = 0; i < hd.start.size(); i++) {
+    if (hd.start[i]) {
+      hd.startIds.push_back(i);
+    }
+  }
+  for (int i = 0; i < hd.accept.size(); i++) {
+    if (hd.accept[i]) {
+      hd.acceptIds.push_back(i);
+    }
+  }
 
   g.sharedWeights_->resize(g.numArcs());
   CUDA_CHECK(cudaMemcpy(
@@ -69,7 +78,7 @@ Graph Graph::cpu() {
   return g;
 }
 
-Graph Graph::cuda(int device_) {
+Graph Graph::cuda(int device_) const {
   // No-op if already on GPU
   if (isCuda() && device() == device_) {
     return *this;
@@ -89,8 +98,8 @@ Graph Graph::cuda(int device_) {
   auto& hd = *(this->sharedGraph_);
   auto& dd = g.sharedGraph_->deviceData;
   cuda::detail::DeviceManager dm(device_);
-  dd.allocate(g.numNodes(), g.numArcs());
   if (!isCuda()) {
+    dd.allocate(g.numNodes(), g.numArcs());
     copyHostDevice(dd.start, hd.start, g.numNodes());
     copyHostDevice(dd.accept, hd.accept, g.numNodes());
     copyHostDevice(dd.inArcOffset, hd.inArcOffset, g.numNodes() + 1);
@@ -107,16 +116,35 @@ Graph Graph::cuda(int device_) {
       g.numArcs() * sizeof(float),
       cudaMemcpyDefault));
   } else {
-    dd.deepCopy(hd.deviceData, g.numNodes(), g.numArcs(), device_);
+    dd.deepCopy(hd.deviceData, device_);
   }
   return g;
 }
 
-Graph Graph::cuda() {
+Graph Graph::cuda() const {
   return cuda(cuda::getDevice());
 }
 
+/*void Graph::addGrad(float* grad) {
+  if (!isCuda()) {
+    throws std::logic_error(
+      "[Graph::addGrad] This addGrad is only for GPU graphs.");
+  }
+  if (calcGrad()) {
+    std::lock_guard<std::mutex> lock(sharedGraph_->grad_lock);
+    if (isGradAvailable()) {
+      // Add grad kernel
+    } else {
+      sharedGrad_->grad = std::make_unique<Graph>(false);
+      sharedGrad_->grad->sharedGraph_ = sharedGraph_;
+      *(sharedGrad_->grad->sharedWeights_) = other;
+    }
+  }
+}*/
+
 void Graph::GraphGPU::allocate(size_t numNodes, size_t numArcs) {
+  this->numNodes = numNodes;
+  this->numArcs = numArcs;
   CUDA_CHECK(cudaMalloc((void**)(&start), sizeof(int) * numNodes));
   CUDA_CHECK(cudaMalloc((void**)(&accept), sizeof(int) * numNodes));
   CUDA_CHECK(cudaMalloc((void**)(&inArcOffset), sizeof(int) * (numNodes + 1)));
@@ -131,9 +159,9 @@ void Graph::GraphGPU::allocate(size_t numNodes, size_t numArcs) {
 }
 
 void Graph::GraphGPU::deepCopy(
-    const Graph::GraphGPU& other, size_t numNodes, size_t numArcs, int device) {
+    const Graph::GraphGPU& other, int device) {
   cuda::detail::DeviceManager dm(device);
-  allocate(numNodes, numArcs);
+  allocate(other.numNodes, other.numArcs);
   copyDeviceDevice(start, other.start, numNodes);
   copyDeviceDevice(accept, other.accept, numNodes);
   copyDeviceDevice(inArcOffset, other.inArcOffset, numNodes + 1);
@@ -151,7 +179,7 @@ void Graph::GraphGPU::deepCopy(
     cudaMemcpyDeviceToDevice));
 }
 
-Graph::GraphGPU::~GraphGPU() {
+void Graph::GraphGPU::free() {
   if (start != nullptr) {
     CUDA_CHECK(cudaFree(start)); 
     CUDA_CHECK(cudaFree(accept)); 

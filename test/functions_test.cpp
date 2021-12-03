@@ -82,7 +82,7 @@ TEST_CASE("Test Project/clone", "[functions.clone]") {
 }
 
 TEST_CASE("Test Composition", "[functions.compose]") {
-/*  {
+  {
     // Composing with an empty graph gives an empty graph
     Graph g1;
     Graph g2;
@@ -108,7 +108,13 @@ TEST_CASE("Test Composition", "[functions.compose]") {
     // Check doubly sorted version
     g2.arcSort();
     CHECK(equal(compose(g1, g2), Graph{}));
-  }*/
+  }
+
+  {
+    auto g1 = linearGraph(1, 1);
+    auto g2 = linearGraph(2, 1);
+    CHECK(equal(compose(g1, g2), Graph{}));
+  }
 
   {
     // Self-loop in the composed graph

@@ -54,7 +54,33 @@ constexpr int epsilon{-1};
  * max operations and the score for a path is accumulated with addition.
  */
 class Graph {
+
  public:
+  // Contains device data when GPU is enabled
+  struct GraphGPU {
+
+    size_t numNodes{0};
+    size_t numArcs{0};
+
+    int* start{nullptr};
+    int* accept;
+    int* outArcOffset;
+    int* inArcOffset;
+
+    int* inArcs;
+    int* outArcs;
+    int* olabels;
+    int* ilabels;
+    int* srcNodes;
+    int* dstNodes;
+    float* weights;
+
+    void allocate(size_t numNodes, size_t numArcs);
+    void free();
+
+    void deepCopy(
+        const GraphGPU& other, int device);
+  };
 
   using GradFunc =
       std::function<void(std::vector<Graph>& inputs, Graph& deltas)>;
@@ -210,17 +236,27 @@ class Graph {
   /**
    * Move the graph to the CPU.
    */
-  Graph cpu();
+  Graph cpu() const;
 
   /**
    * Move the graph to currently active GPU.
    */
-  Graph cuda();
+  Graph cuda() const;
 
   /**
    * Move the graph to GPU specified by `device`.
    */
-  Graph cuda(int device);
+  Graph cuda(int device) const;
+
+  /**
+   * Get the `GraphGPU` device data for the graph.
+   */
+  Graph::GraphGPU& deviceData() const {
+    if (!isCuda()) {
+      throw ("[Graph::deviceData] Graph is not on the GPU");
+    }
+    return sharedGraph_->deviceData;
+  }
 
   /**
    * Returns true if the graph is on the GPU.
@@ -263,6 +299,12 @@ class Graph {
    * `Graph::addGrad` methods are intended for use by the autograd.
    */
   void addGrad(const std::vector<float>& other);
+
+  /**
+   * Add a `float*` of gradients to the gradient graph weights. This function
+   * is only intended for use by device Graphs.
+   **/
+  void addGrad(float* grad);
 
   /**
    * Add a `Graph` of gradients to the gradient graph. The `Graph::addGrad`
@@ -457,29 +499,6 @@ class Graph {
     }
   }
 
-  // Contains device data when GPU is enabled
-  struct GraphGPU {
-
-    int* start{nullptr};
-    int* accept;
-    int* outArcOffset;
-    int* inArcOffset;
-
-    int* inArcs;
-    int* outArcs;
-    int* olabels;
-    int* ilabels;
-    int* srcNodes;
-    int* dstNodes;
-    float* weights;
-
-    void allocate(size_t numNodes, size_t numArcs);
-
-    void deepCopy(
-        const GraphGPU& other, size_t numNodes, size_t numArcs, int device);
-    ~GraphGPU();
-  };
-
   struct SharedGraph {
     /// Underlying graph data
     size_t numNodes{0};
@@ -518,6 +537,9 @@ class Graph {
     GraphGPU deviceData;
 
     std::mutex grad_lock;
+    ~SharedGraph() {
+      deviceData.free();
+    }
   };
 
   struct SharedGrad {

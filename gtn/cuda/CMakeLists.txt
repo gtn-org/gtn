@@ -7,6 +7,9 @@ set(
 )
 set(
   GTN_CUDA_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/compose.cu
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/cuda.h
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/cuda.cu
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/functions.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/functions.cpp
 )
