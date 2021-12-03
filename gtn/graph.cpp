@@ -63,7 +63,7 @@ size_t Graph::addArc(
   assert(ilabel >= epsilon && olabel >= epsilon);
   int idx = static_cast<int>(numArcs());
   sharedGraph_->numArcs++;
-  sharedWeights_->push_back(weight);
+  sharedWeights_->weights.push_back(weight);
   sharedGraph_->ilabels.push_back(ilabel);
   sharedGraph_->olabels.push_back(olabel);
   sharedGraph_->srcNodes.push_back(srcNode);
@@ -158,7 +158,7 @@ void Graph::addGrad(std::vector<float>&& other) {
     } else {
       sharedGrad_->grad = std::make_unique<Graph>(false);
       sharedGrad_->grad->sharedGraph_ = sharedGraph_;
-      *(sharedGrad_->grad->sharedWeights_) = std::move(other);
+      sharedGrad_->grad->sharedWeights_->weights = std::move(other);
     }
   }
 }
@@ -180,13 +180,13 @@ void Graph::addGrad(const std::vector<float>& other) {
     } else {
       sharedGrad_->grad = std::make_unique<Graph>(false);
       sharedGrad_->grad->sharedGraph_ = sharedGraph_;
-      *(sharedGrad_->grad->sharedWeights_) = other;
+      sharedGrad_->grad->sharedWeights_->weights = other;
     }
   }
 }
 
 void Graph::addGrad(const Graph& other) {
-  addGrad(*other.sharedWeights_);
+  addGrad(other.sharedWeights_->weights);
 }
 
 void Graph::setCalcGrad(bool calcGrad) {
@@ -228,11 +228,15 @@ Graph Graph::deepCopy(const Graph& src) {
   out.sharedGraph_->olabels = src.sharedGraph_->olabels;
   out.sharedGraph_->srcNodes = src.sharedGraph_->srcNodes;
   out.sharedGraph_->dstNodes = src.sharedGraph_->dstNodes;
-  *out.sharedWeights_ = *src.sharedWeights_;
+  out.sharedWeights_->weights = src.sharedWeights_->weights;
   if (out.isCuda()) {
     out.sharedGraph_->device = src.device();
     out.sharedGraph_->deviceData.deepCopy(
         src.sharedGraph_->deviceData,
+        src.device());
+    out.sharedWeights_->deepCopy(
+        src.sharedWeights_->deviceWeights,
+        src.numArcs(),
         src.device());
   }
   return out;
@@ -269,12 +273,21 @@ void Graph::arcSort(bool olabel /* = false */) {
   }
 }
 
+void Graph::setWeights(float* weights) {
+  if (isCuda()) {
+    sharedWeights_->deviceWeights = weights;
+  } else {
+    std::copy(weights, weights + numArcs(), this->weights());
+  }
+}
+
+
 void Graph::setWeights(const float* weights) {
   if (isCuda()) {
     throw std::invalid_argument(
       "[Graph::setWeights] Weights can only be set on CPU graphs");
   }
-  std::copy(weights, weights + numArcs(), sharedWeights_->data());
+  setWeights(const_cast<float*>(weights));
 }
 
 void Graph::labelsToArray(int* out, bool ilabel) {

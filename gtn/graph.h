@@ -73,7 +73,6 @@ class Graph {
     int* ilabels;
     int* srcNodes;
     int* dstNodes;
-    float* weights;
 
     void allocate(size_t numNodes, size_t numArcs);
     void free();
@@ -201,15 +200,18 @@ class Graph {
    * `Graph::numArcs()` elements.
    */
   float* weights() {
-    assert(sharedWeights_ != nullptr);
-    return sharedWeights_->data();
+    return const_cast<float*>(const_cast<const Graph*>(this)->weights());
   }
   /**
    * A `const` version of `Graph::weights`.
    */
   const float* weights() const {
     assert(sharedWeights_ != nullptr);
-    return sharedWeights_->data();
+    if (isCuda()) {
+      return sharedWeights_->deviceWeights;
+    } else {
+      return sharedWeights_->weights.data();
+    }
   }
 
   /**
@@ -217,6 +219,12 @@ class Graph {
    * `Graph::numArcs()` elements.
    */
   void setWeights(const float* weights);
+
+  /**
+   * Set the arc weights on a graph to the array pointed to by weights.
+   */
+  void setWeights(float* weights);
+
 
   /**
    * Extract an array of labels from a graph. The array should have space for
@@ -475,12 +483,12 @@ class Graph {
   /** The weight of the `i`-th arc. */
   float weight(size_t i) const {
     assert(sharedWeights_ != nullptr);
-    return (*sharedWeights_)[i];
+    return sharedWeights_->weights[i];
   }
   /** Set the weight of the `i`-th arc. */
   void setWeight(size_t i, float weight) {
     assert(sharedWeights_ != nullptr);
-    (*sharedWeights_)[i] = weight;
+    sharedWeights_->weights[i] = weight;
   }
   /** @}*/
 
@@ -550,9 +558,16 @@ class Graph {
     bool calcGrad;
   };
 
+  struct SharedWeights {
+    std::vector<float> weights;
+    float *deviceWeights{nullptr};
+    void deepCopy(float *weights, size_t numArcs, int device);
+    ~SharedWeights();
+  };
+
   std::shared_ptr<SharedGraph> sharedGraph_{std::make_shared<SharedGraph>()};
-  std::shared_ptr<std::vector<float>> sharedWeights_{
-      std::make_shared<std::vector<float>>()};
+  std::shared_ptr<SharedWeights> sharedWeights_{
+      std::make_shared<SharedWeights>()};
   std::shared_ptr<SharedGrad> sharedGrad_{std::make_shared<SharedGrad>()};
 };
 

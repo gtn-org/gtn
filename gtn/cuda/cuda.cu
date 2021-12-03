@@ -69,10 +69,10 @@ Graph Graph::cpu() const {
     }
   }
 
-  g.sharedWeights_->resize(g.numArcs());
+  g.sharedWeights_->weights.resize(g.numArcs());
   CUDA_CHECK(cudaMemcpy(
     static_cast<void*>(g.weights()),
-    static_cast<const void*>(dd.weights),
+    static_cast<const void*>(this->weights()),
     g.numArcs() * sizeof(int),
     cudaMemcpyDefault));
   return g;
@@ -110,8 +110,11 @@ Graph Graph::cuda(int device_) const {
     copyHostDevice(dd.olabels, hd.olabels, g.numArcs());
     copyHostDevice(dd.srcNodes, hd.srcNodes, g.numArcs());
     copyHostDevice(dd.dstNodes, hd.dstNodes, g.numArcs());
+    CUDA_CHECK(cudaMalloc(
+      (void**)(&g.sharedWeights_->deviceWeights),
+      g.numArcs() * sizeof(float)));
     CUDA_CHECK(cudaMemcpyAsync(
-      static_cast<void*>(dd.weights),
+      static_cast<void*>(g.weights()),
       static_cast<const void*>(this->weights()),
       g.numArcs() * sizeof(float),
       cudaMemcpyDefault));
@@ -155,7 +158,6 @@ void Graph::GraphGPU::allocate(size_t numNodes, size_t numArcs) {
   CUDA_CHECK(cudaMalloc((void**)(&olabels), sizeof(int) * numArcs));
   CUDA_CHECK(cudaMalloc((void**)(&srcNodes), sizeof(int) * numArcs));
   CUDA_CHECK(cudaMalloc((void**)(&dstNodes), sizeof(int) * numArcs));
-  CUDA_CHECK(cudaMalloc((void**)(&weights), sizeof(float) * numArcs));
 }
 
 void Graph::GraphGPU::deepCopy(
@@ -172,11 +174,6 @@ void Graph::GraphGPU::deepCopy(
   copyDeviceDevice(olabels, other.olabels, numArcs);
   copyDeviceDevice(srcNodes, other.srcNodes, numArcs);
   copyDeviceDevice(dstNodes, other.dstNodes, numArcs);
-  CUDA_CHECK(cudaMemcpyAsync(
-    static_cast<void*>(weights),
-    static_cast<const void*>(other.weights),
-    numArcs * sizeof(float),
-    cudaMemcpyDeviceToDevice));
 }
 
 void Graph::GraphGPU::free() {
@@ -191,6 +188,22 @@ void Graph::GraphGPU::free() {
     CUDA_CHECK(cudaFree(olabels)); 
     CUDA_CHECK(cudaFree(srcNodes)); 
     CUDA_CHECK(cudaFree(dstNodes)); 
+  }
+}
+
+void Graph::SharedWeights::deepCopy(float *src, size_t numArcs, int device) {
+  cuda::detail::DeviceManager dm(device);
+  CUDA_CHECK(cudaMalloc((void**)(&deviceWeights), sizeof(float) * numArcs));
+  CUDA_CHECK(cudaMemcpyAsync(
+    static_cast<void*>(deviceWeights),
+    static_cast<const void*>(src),
+    numArcs * sizeof(float),
+    cudaMemcpyDeviceToDevice));
+}
+
+Graph::SharedWeights::~SharedWeights() {
+  if (deviceWeights != nullptr) {
+    CUDA_CHECK(cudaFree(deviceWeights));
   }
 }
 
