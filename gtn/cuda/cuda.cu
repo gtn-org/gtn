@@ -1,10 +1,21 @@
 #include <sstream>
+#include <thrust/device_ptr.h>
+#include <thrust/fill.h>
+#include <thrust/functional.h>
+#include <thrust/transform.h>
 
 #include "cuda.h"
 
 namespace gtn {
 
 namespace {
+
+void add(const float* a, const float* b, float* out, size_t size) {
+  thrust::device_ptr<const float> aPtr(a);
+  thrust::device_ptr<const float> bPtr(b);
+  thrust::device_ptr<float> outPtr(out);
+  thrust::transform(aPtr, aPtr + size, bPtr, outPtr, thrust::plus<float>());
+}
 
 void copyDeviceDevice(int* dst, const int* src, size_t size) {
   CUDA_CHECK(cudaMemcpyAsync(
@@ -99,7 +110,7 @@ Graph Graph::cuda(int device_) const {
   auto& dd = g.sharedGraph_->deviceData;
   cuda::detail::DeviceManager dm(device_);
   if (!isCuda()) {
-    dd.allocate(g.numNodes(), g.numArcs());
+    dd.allocate(this->numNodes(), this->numArcs());
     copyHostDevice(dd.start, hd.start, g.numNodes());
     copyHostDevice(dd.accept, hd.accept, g.numNodes());
     copyHostDevice(dd.inArcOffset, hd.inArcOffset, g.numNodes() + 1);
@@ -128,22 +139,22 @@ Graph Graph::cuda() const {
   return cuda(cuda::getDevice());
 }
 
-/*void Graph::addGrad(float* grad) {
+void Graph::addGrad(const float* other) {
   if (!isCuda()) {
-    throws std::logic_error(
+    throw std::logic_error(
       "[Graph::addGrad] This addGrad is only for GPU graphs.");
   }
   if (calcGrad()) {
     std::lock_guard<std::mutex> lock(sharedGraph_->grad_lock);
     if (isGradAvailable()) {
-      // Add grad kernel
+      add(other, grad().weights(), grad().weights(), numArcs());
     } else {
       sharedGrad_->grad = std::make_unique<Graph>(false);
       sharedGrad_->grad->sharedGraph_ = sharedGraph_;
-      *(sharedGrad_->grad->sharedWeights_) = other;
+      sharedGrad_->grad->sharedWeights_->deepCopy(other, numArcs(), device());
     }
   }
-}*/
+}
 
 void Graph::GraphGPU::allocate(size_t numNodes, size_t numArcs) {
   this->numNodes = numNodes;
@@ -191,14 +202,15 @@ void Graph::GraphGPU::free() {
   }
 }
 
-void Graph::SharedWeights::deepCopy(float *src, size_t numArcs, int device) {
+void Graph::SharedWeights::deepCopy(
+    const float *src, size_t numArcs, int device) {
   cuda::detail::DeviceManager dm(device);
   CUDA_CHECK(cudaMalloc((void**)(&deviceWeights), sizeof(float) * numArcs));
   CUDA_CHECK(cudaMemcpyAsync(
     static_cast<void*>(deviceWeights),
     static_cast<const void*>(src),
     numArcs * sizeof(float),
-    cudaMemcpyDeviceToDevice));
+    cudaMemcpyDefault));
 }
 
 Graph::SharedWeights::~SharedWeights() {
@@ -230,6 +242,19 @@ void setDevice(int device) {
 }
 
 namespace detail {
+
+float* ones(size_t size, int device) {
+  DeviceManager dm(device);
+  float *res;
+  CUDA_CHECK(cudaMalloc((void**)(&res), size * sizeof(float)));
+  thrust::device_ptr<float> dPtr(res);
+  thrust::fill(dPtr, dPtr + size, 1.0f);
+  return res;
+}
+
+void free(float* ptr) {
+  CUDA_CHECK(cudaFree(static_cast<void*>(ptr)));
+}
 
 void cudaCheck(cudaError_t err, const char* file, int line) {
   if (err != cudaSuccess) {

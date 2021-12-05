@@ -132,10 +132,16 @@ class Graph {
 
   /** The number of arcs in the graph. */
   size_t numArcs() const {
+    if (isCuda()) {
+      return sharedGraph_->deviceData.numArcs;
+    }
     return sharedGraph_->numArcs;
   };
   /** The number of nodes in the graph. */
   size_t numNodes() const {
+    if (isCuda()) {
+      return sharedGraph_->deviceData.numNodes;
+    }
     return sharedGraph_->numNodes;
   };
   /** The number of starting nodes in the graph. */
@@ -312,7 +318,7 @@ class Graph {
    * Add a `float*` of gradients to the gradient graph weights. This function
    * is only intended for use by device Graphs.
    **/
-  void addGrad(float* grad);
+  void addGrad(const float* grad);
 
   /**
    * Add a `Graph` of gradients to the gradient graph. The `Graph::addGrad`
@@ -561,7 +567,7 @@ class Graph {
   struct SharedWeights {
     std::vector<float> weights;
     float *deviceWeights{nullptr};
-    void deepCopy(float *weights, size_t numArcs, int device);
+    void deepCopy(const float *weights, size_t numArcs, int device);
     ~SharedWeights();
   };
 

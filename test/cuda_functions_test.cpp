@@ -482,16 +482,14 @@ TEST_CASE("Test Cuda Compose Grad", "[cuda::compose_grad]") {
 
   auto firstGrad = first.grad().cpu();
   auto secondGrad = second.grad().cpu();
-  std::cout << firstGrad << std::endl;
-  std::cout << secondGrad << std::endl;
-/*  std::vector<float> gradsFirst = {1, 0, 0, 1, 1, 0, 1, 2, 0, 0, 2, 0};
-  std::vector<float> gradsSecond = {1, 2, 3, 2};
-  for (int i = 0; i < gradsFirst.size(); i++) {
-    CHECK(gradsFirst[i] == first.grad().weight(i));
+  std::vector<float> expectedFirst = {1, 0, 0, 1, 1, 0, 1, 2, 0, 0, 2, 0};
+  std::vector<float> expectedSecond = {1, 2, 3, 2};
+  for (int i = 0; i < firstGrad.numArcs(); i++) {
+    CHECK(expectedFirst[i] == firstGrad.weight(i));
   }
-  for (int i = 0; i < gradsSecond.size(); i++) {
-    CHECK(gradsSecond[i] == second.grad().weight(i));
-  }*/
+  for (int i = 0; i < secondGrad.numArcs(); i++) {
+    CHECK(expectedSecond[i] == secondGrad.weight(i));
+  }
 }
 
 /*

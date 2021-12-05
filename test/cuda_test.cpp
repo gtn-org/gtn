@@ -76,4 +76,27 @@ TEST_CASE("Test Graph CUDA", "[Graph.cuda]") {
     auto gdevCopy = Graph::deepCopy(gdev);
     CHECK(equal(g, gdevCopy.cpu()));
   }
+
+  {
+    Graph g;
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0);
+
+    Graph grad;
+    grad.addNode(true);
+    grad.addNode(false, true);
+    grad.addArc(0, 1, 0, 0, 1.0);
+
+    // Check adding gradients works.
+    g = g.cuda();
+    grad = grad.cuda();
+    g.addGrad(grad);
+    CHECK(g.grad().cpu().item() == 1.0);
+    g.addGrad(grad.weights());
+    CHECK(g.grad().cpu().item() == 2.0);
+
+    // Check throws for wrong devices
+    CHECK_THROWS(g.addGrad(grad.cpu()));
+  }
 }

@@ -341,6 +341,7 @@ void generateCombinedGraphNodesAndArcs(
     int* gradInfoFirst,
     int* gradInfoSecond,
     GraphGPU newGraphDP,
+    float* weights,
     int ilabel,
     int olabel,
     float weight) {
@@ -378,12 +379,7 @@ void generateCombinedGraphNodesAndArcs(
     newGraphDP.olabels[outArcIdx] = olabel;
     newGraphDP.srcNodes[outArcIdx] = newNodesOffset[curIdx];
     newGraphDP.dstNodes[outArcIdx] = newNodesOffset[dstIdx];
-    newGraphDP.weights[outArcIdx] = weight;
-
-    // printf("ilabels %d olabels %d srcNodes %d dstNodes %d weights %f\n",
-           // newGraphDP.ilabels[outArcIdx], newGraphDP.olabels[outArcIdx],
-	   // newGraphDP.srcNodes[outArcIdx], newGraphDP.dstNodes[outArcIdx],
-	   // newGraphDP.weights[outArcIdx]);
+    weights[outArcIdx] = weight;
 
     gradInfoFirst[outArcIdx] = arcPair.x;
     gradInfoSecond[outArcIdx] = arcPair.y;
@@ -657,6 +653,8 @@ __global__
 void generateNodeAndArcKernel(
       const GraphGPU graphDP1GPU,
       const GraphGPU graphDP2GPU,
+      const float* weightsFirst,
+      const float* weightsSecond,
       const int* arcCrossProductOffsetGPU,
       const int* toExploreNumArcsFirstGPU,
       const int* toExploreNumArcsSecondGPU,
@@ -668,6 +666,7 @@ void generateNodeAndArcKernel(
       int totalArcs,
       size_t numArcCrossProductOffset,
       GraphGPU newGraphDPGPU,
+      float* weights,
       int* toExploreGPU,
       int* gradInfoFirstGPU,
       int* gradInfoSecondGPU,
@@ -727,9 +726,10 @@ void generateNodeAndArcKernel(
               gradInfoFirstGPU,
               gradInfoSecondGPU,
               newGraphDPGPU,
+              weights,
               graphDP1GPU.ilabels[firstArcIdx],
               graphDP2GPU.olabels[secondArcIdx],
-              graphDP1GPU.weights[firstArcIdx] + graphDP2GPU.weights[secondArcIdx]);
+              weightsFirst[firstArcIdx] + weightsSecond[secondArcIdx]);
         }
       }
 
@@ -764,9 +764,10 @@ void generateNodeAndArcKernel(
             gradInfoFirstGPU,
             gradInfoSecondGPU,
             newGraphDPGPU,
+            weights,
             graphDP1GPU.ilabels[firstArcIdx],
             epsilon,
-            graphDP1GPU.weights[firstArcIdx]);
+            weightsFirst[firstArcIdx]);
       }
 
       // The epsilon matches
@@ -799,9 +800,10 @@ void generateNodeAndArcKernel(
             gradInfoFirstGPU,
             gradInfoSecondGPU,
             newGraphDPGPU,
+            weights,
             epsilon,
             graphDP2GPU.olabels[secondArcIdx],
-            graphDP2GPU.weights[secondArcIdx]);
+            weightsSecond[secondArcIdx]);
       }
     }
   }
@@ -901,6 +903,34 @@ void findReachableInitInitKernel(
       reachableGPU[gTid] = true;
     }
   }
+}
+
+__global__
+void gradKernel(
+    int* arcIds,
+    const float* deltas,
+    float* grad,
+    size_t numArcs) {
+  const int gTid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (gTid < numArcs && arcIds[gTid] >= 0) {
+    atomicAdd(grad + arcIds[gTid], deltas[gTid]);
+  }
+}
+
+void calcGrad(Graph& g, int* arcIds, const Graph& deltas) {
+  if (!g.calcGrad()) {
+    return;
+  }
+  const int NT = 128;
+  const int gridSize = div_up(deltas.numArcs(), NT);
+
+  float* grad;
+  CUDA_CHECK(cudaMalloc((void**)(&grad), sizeof(float) * g.numArcs()));
+  CUDA_CHECK(cudaMemset(static_cast<void*>(grad), 0, sizeof(float) * g.numArcs()));
+  gradKernel<<<gridSize, NT, 0, 0>>>(arcIds, deltas.weights(), grad, deltas.numArcs());
+  g.addGrad(grad);
+  CUDA_CHECK(cudaFree(grad));
 }
 
 } // namespace
@@ -1113,7 +1143,12 @@ Graph compose(const Graph& first, const Graph& second) {
   CUDA_CHECK(cudaMalloc((void **)(&(nGraphGPU.olabels)), sizeof(int) * totalOutArcs));
   CUDA_CHECK(cudaMalloc((void **)(&(nGraphGPU.srcNodes)), sizeof(int) * totalOutArcs));
   CUDA_CHECK(cudaMalloc((void **)(&(nGraphGPU.dstNodes)), sizeof(int) * totalOutArcs));
-  CUDA_CHECK(cudaMalloc((void **)(&(nGraphGPU.weights)), sizeof(float) * totalOutArcs));
+
+  {
+    float* weights;
+    CUDA_CHECK(cudaMalloc((void **)(&weights), sizeof(float) * totalOutArcs));
+    nGraph.setWeights(weights);
+  }
 
   CUDA_CHECK(cudaMemcpy((void *)(nGraphGPU.inArcOffset), (void *)(inArcOffsetGPU), sizeof(int) * (totalNodes + 1), cudaMemcpyDeviceToDevice));
   CUDA_CHECK(cudaMemcpy((void *)(nGraphGPU.outArcOffset), (void *)(outArcOffsetGPU), sizeof(int) * (totalNodes + 1), cudaMemcpyDeviceToDevice));
@@ -1179,11 +1214,11 @@ Graph compose(const Graph& first, const Graph& second) {
 
       const int gridSize = div_up(totalArcs, NT);
 
-      generateNodeAndArcKernel<<<gridSize, NT, 0, 0>>>(g1, g2,
+      generateNodeAndArcKernel<<<gridSize, NT, 0, 0>>>(g1, g2, first.weights(), second.weights(),
         arcCrossProductOffsetGPU, toExploreNumArcsFirstGPU, toExploreNumArcsSecondGPU,
         toExploreNodePairFirstGPU, toExploreNodePairSecondGPU, reachableGPU,
         epsilonMatchedGPU, numNodesFirst, totalArcs, numArcCrossProductOffset,
-        nGraphGPU, toExploreGPU, gradInfo->first, gradInfo->second,
+        nGraphGPU, nGraph.weights(), toExploreGPU, gradInfo->first, gradInfo->second,
         newNodesOffsetGPU, newNodesVisitedGPU);
     }
 
@@ -1210,13 +1245,8 @@ Graph compose(const Graph& first, const Graph& second) {
   CUDA_CHECK(cudaFree(newNodesVisitedGPU));
 
   auto gradFunc = [gradInfo](std::vector<Graph>& inputs, Graph deltas) {
-    // In this case the arc's parents are always from the
-    // first and second input graphs respectively.
-    // TODO write kernel(s) for the gradient computation
-    bool calcGrad1 = inputs[0].calcGrad();
-    bool calcGrad2 = inputs[1].calcGrad();
-    //inputs[0].addGrad(std::move(grad1));
-    //inputs[1].addGrad(std::move(grad2));
+    calcGrad(inputs[0], gradInfo->first, deltas);
+    calcGrad(inputs[1], gradInfo->second, deltas);
   };
   nGraph.setGradFunc(std::move(gradFunc));
   return nGraph;

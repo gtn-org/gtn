@@ -9,6 +9,7 @@
 #include <unordered_set>
 
 #include "gtn/autograd.h"
+#include "gtn/cuda/cuda.h"
 
 namespace gtn {
 
@@ -56,8 +57,14 @@ void backwardImpl(Graph g, bool retainGraph) {
 
 void backward(Graph g, bool retainGraph /* = false */) {
   // Seed the initial deltas
-  auto deltas = std::vector<float>(g.numArcs(), 1.0);
-  g.addGrad(std::move(deltas));
+  if (g.isCuda()) {
+    auto ones = cuda::detail::ones(g.numArcs(), g.device());
+    g.addGrad(ones);
+    cuda::detail::free(ones);
+  } else {
+    auto deltas = std::vector<float>(g.numArcs(), 1.0);
+    g.addGrad(std::move(deltas));
+  }
   backwardImpl(g, retainGraph);
 }
 

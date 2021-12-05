@@ -36,6 +36,10 @@ class DeviceManager {
   int device_;
 };
 
+float* ones(size_t size, int device);
+
+void free(float* ptr);
+
 #if defined(CUDA)
 void cudaCheck(cudaError_t err, const char* file, int line);
 #endif

@@ -144,7 +144,7 @@ const Graph& Graph::grad() const {
 void Graph::addGrad(std::vector<float>&& other) {
   if (isCuda()) {
     throw std::logic_error(
-      "[Graph::addGrad] Use addGrad(float*) for GPU graphs.");
+      "[Graph::addGrad] Use addGrad(const float*) for GPU graphs.");
   }
   if (calcGrad()) {
     if (other.size() != numArcs()) {
@@ -166,7 +166,7 @@ void Graph::addGrad(std::vector<float>&& other) {
 void Graph::addGrad(const std::vector<float>& other) {
   if (isCuda()) {
     throw std::logic_error(
-      "[Graph::addGrad] Use addGrad(float*) for GPU graphs.");
+      "[Graph::addGrad] Use addGrad(const float*) for GPU graphs.");
   }
   if (calcGrad()) {
     if (other.size() != numArcs()) {
@@ -186,7 +186,15 @@ void Graph::addGrad(const std::vector<float>& other) {
 }
 
 void Graph::addGrad(const Graph& other) {
-  addGrad(other.sharedWeights_->weights);
+  if (other.isCuda() != isCuda() || (isCuda() && device() != other.device())) {
+    throw std::invalid_argument("[Graph::addGrad] device mismach");
+  }
+
+  if (isCuda()) {
+    addGrad(other.weights());
+  } else {
+    addGrad(other.sharedWeights_->weights);
+  }
 }
 
 void Graph::setCalcGrad(bool calcGrad) {
@@ -280,7 +288,6 @@ void Graph::setWeights(float* weights) {
     std::copy(weights, weights + numArcs(), this->weights());
   }
 }
-
 
 void Graph::setWeights(const float* weights) {
   if (isCuda()) {
