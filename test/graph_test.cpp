@@ -136,7 +136,7 @@ TEST_CASE("Test Graph", "[graph]") {
   }
 }
 
-TEST_CASE("Test id", "[Graph::id]") {
+TEST_CASE("Test id", "[graph.id]") {
   Graph g;
   auto id = g.id();
   g.addNode(true);
@@ -161,7 +161,7 @@ TEST_CASE("Test id", "[Graph::id]") {
   CHECK(g4.id() != g.id());
 }
 
-TEST_CASE("Test copy", "[Graph::deepCopy]") {
+TEST_CASE("Test copy", "[graph.deepCopy]") {
   Graph graph =
       loadTxt(std::stringstream("0 1\n"
                                 "3 4\n"
@@ -184,7 +184,7 @@ TEST_CASE("Test copy", "[Graph::deepCopy]") {
   CHECK(!equal(copied, graph));
 }
 
-TEST_CASE("Test arc weight get/set", "[Graph.weights]") {
+TEST_CASE("Test arc weight get/set", "[graph.weights]") {
   std::vector<float> l = {1.1f, 2.2f, 3.3f, 4.4f};
 
   Graph g;
@@ -202,7 +202,7 @@ TEST_CASE("Test arc weight get/set", "[Graph.weights]") {
   CHECK(l == std::vector<float>(g.weights(), g.weights() + g.numArcs()));
 }
 
-TEST_CASE("Test arc label getters", "[graph labelsToVector]") {
+TEST_CASE("Test arc label getters", "[graph.labelsToVector]") {
   std::vector<int> l = {0, 1, 2, 3};
 
   Graph g;
@@ -220,7 +220,7 @@ TEST_CASE("Test arc label getters", "[graph labelsToVector]") {
   CHECK(l == g.labelsToVector(/*ilabel=*/false));
 }
 
-TEST_CASE("Test gradient functionality", "[graph grad]") {
+TEST_CASE("Test gradient functionality", "[graph.grad]") {
   {
     // calcGrad is false
     Graph g(false);
@@ -331,7 +331,7 @@ TEST_CASE("Test gradient functionality", "[graph grad]") {
   }
 }
 
-TEST_CASE("Test sort", "[Graph::arcSort]") {
+TEST_CASE("Test sort", "[graph.arcSort]") {
   // sort on empty graph does nothing
   Graph g;
   g.arcSort();
@@ -383,7 +383,7 @@ TEST_CASE("Test sort", "[Graph::arcSort]") {
   CHECK(g.olabelSorted());
 }
 
-TEST_CASE("Test threaded grad", "[threaded_graph_grad]") {
+TEST_CASE("Test threaded grad", "[graph.threadedGrad]") {
   Graph g;
   g.addNode(true);
   g.addNode(false, true);

@@ -6,12 +6,42 @@
  */
 
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <utility>
 
 #include "graph.h"
+#include "cuda/cuda.h"
 
 namespace gtn {
+
+namespace{
+
+void push_back(float** arr, size_t size, float val) {
+  // If the current size is a power of 2, then we need to allocate more space
+  if (!(size & (size - 1))) {
+    size_t space = size ? (size << 1) : 1;
+    auto newarr = new float[space];
+    std::copy(*arr, *arr + size, newarr);
+    delete[] *arr;
+    (*arr) = newarr;
+  }
+  (*arr)[size] = val;
+}
+
+void push_back(int** arr, size_t size, int val) {
+  // If the current size is a power of 2, then we need to allocate more space
+  if (!(size & (size - 1))) {
+    size_t space = size ? (size << 1) : 1;
+    auto newarr = new int[space];
+    std::copy(*arr, *arr + size, newarr);
+    delete[] *arr;
+    (*arr) = newarr;
+  }
+  (*arr)[size] = val;
+}
+
+} // namespace
 
 Graph::Graph(GradFunc gradFunc, std::vector<Graph> inputs) {
   sharedGrad_->calcGrad = false;
@@ -35,18 +65,20 @@ Graph::Graph(bool calcGrad /* = true */) {
 
 int Graph::addNode(bool start /* = false */, bool accept /* = false */) {
   int idx = static_cast<int>(numNodes());
+  push_back(&sharedGraph_->start, numNodes(), start);
+  push_back(&sharedGraph_->accept, numNodes(), accept);
   sharedGraph_->numNodes++;
-  sharedGraph_->start.push_back(start);
-  sharedGraph_->accept.push_back(accept);
   if (start) {
-    sharedGraph_->startIds.push_back(idx);
+    push_back(&sharedGraph_->startIds, numStart(), idx);
+    sharedGraph_->numStart++;
   }
   if (accept) {
-    sharedGraph_->acceptIds.push_back(idx);
+    push_back(&sharedGraph_->acceptIds, numAccept(), idx);
+    sharedGraph_->numAccept++;
   }
   sharedGraph_->ilabelSorted = false;
   sharedGraph_->olabelSorted = false;
-  sharedGraph_->compiled = false;
+  uncompile();
   return idx;
 }
 
@@ -62,26 +94,33 @@ size_t Graph::addArc(
     float weight /* = 0 */) {
   assert(ilabel >= epsilon && olabel >= epsilon);
   int idx = static_cast<int>(numArcs());
+  push_back(&sharedWeights_->weights, numArcs(), weight);
+  push_back(&sharedGraph_->ilabels, numArcs(), ilabel);
+  push_back(&sharedGraph_->olabels, numArcs(), olabel);
+  push_back(&sharedGraph_->srcNodes, numArcs(), srcNode);
+  push_back(&sharedGraph_->dstNodes, numArcs(), dstNode);
   sharedGraph_->numArcs++;
-  sharedWeights_->weights.push_back(weight);
-  sharedGraph_->ilabels.push_back(ilabel);
-  sharedGraph_->olabels.push_back(olabel);
-  sharedGraph_->srcNodes.push_back(srcNode);
-  sharedGraph_->dstNodes.push_back(dstNode);
   sharedGraph_->ilabelSorted = false;
   sharedGraph_->olabelSorted = false;
-  sharedGraph_->compiled = false;
+  uncompile();
   return idx;
 }
+
+void Graph::makeAccept(size_t i) {
+  if (!sharedGraph_->accept[i]) {
+    push_back(&sharedGraph_->acceptIds, numAccept(), static_cast<int>(i));
+    sharedGraph_->accept[i] = true;
+    sharedGraph_->numAccept++;
+  }
+};
 
 void Graph::compile() const {
   sharedGraph_->compiled = true;
 
   auto computeArcsAndOffsets = [numNodes=numNodes(), numArcs=numArcs()](
-      const std::vector<int>& arcNodes,
-      std::vector<int>& offsets,
-      std::vector<int>& arcs) {
-    offsets.resize(numNodes + 1);
+      int* arcNodes,
+      int** offsets,
+      int** arcs) {
     // Count the number of arcs for each node
     std::vector<int> counts(numNodes, 0);
     for (int i = 0; i < numArcs; ++i) {
@@ -89,30 +128,31 @@ void Graph::compile() const {
     }
     // Prefix sum scan to compute the offsets
     int sum = 0;
+    *offsets = new int[numNodes + 1];
     for (int i = 0; i < counts.size(); ++i) {
       int c = counts[i];
       counts[i] = 0;
-      offsets[i] = sum;
+      (*offsets)[i] = sum;
       sum += c;
     }
-    offsets.back() = sum;
+    (*offsets)[numNodes] = sum;
     // Record the index of each node's arcs
-    arcs.resize(numArcs);
+    *arcs = new int[numArcs];
     for (int i = 0; i < numArcs; ++i) {
       auto n = arcNodes[i];
-      arcs[offsets[n] + counts[n]] = i;
+      (*arcs)[(*offsets)[n] + counts[n]] = i;
       counts[n] += 1;
     }
   };
 
   computeArcsAndOffsets(
       sharedGraph_->dstNodes,
-      sharedGraph_->inArcOffset,
-      sharedGraph_->inArcs);
+      &sharedGraph_->inArcOffset,
+      &sharedGraph_->inArcs);
   computeArcsAndOffsets(
       sharedGraph_->srcNodes,
-      sharedGraph_->outArcOffset,
-      sharedGraph_->outArcs);
+      &sharedGraph_->outArcOffset,
+      &sharedGraph_->outArcs);
 }
 
 float Graph::item() const {
@@ -141,28 +181,6 @@ const Graph& Graph::grad() const {
   return *sharedGrad_->grad;
 }
 
-void Graph::addGrad(std::vector<float>&& other) {
-  if (isCuda()) {
-    throw std::logic_error(
-      "[Graph::addGrad] Use addGrad(const float*) for GPU graphs.");
-  }
-  if (calcGrad()) {
-    if (other.size() != numArcs()) {
-      throw std::logic_error("[Graph::addGrad] Invalid grad size.");
-    }
-    std::lock_guard<std::mutex> lock(sharedGraph_->grad_lock);
-    if (isGradAvailable()) {
-      for (int i = 0; i < numArcs(); i++) {
-        grad().setWeight(i, grad().weight(i) + other[i]);
-      }
-    } else {
-      sharedGrad_->grad = std::make_unique<Graph>(false);
-      sharedGrad_->grad->sharedGraph_ = sharedGraph_;
-      sharedGrad_->grad->sharedWeights_->weights = std::move(other);
-    }
-  }
-}
-
 void Graph::addGrad(const std::vector<float>& other) {
   if (isCuda()) {
     throw std::logic_error(
@@ -172,15 +190,31 @@ void Graph::addGrad(const std::vector<float>& other) {
     if (other.size() != numArcs()) {
       throw std::logic_error("[Graph::addGrad] Invalid grad size.");
     }
-    std::lock_guard<std::mutex> lock(sharedGraph_->grad_lock);
+    std::lock_guard<std::mutex> lock(sharedGrad_->grad_lock);
     if (isGradAvailable()) {
-      for (int i = 0; i < numArcs(); i++) {
-        grad().setWeight(i, grad().weight(i) + other[i]);
-      }
+      auto w = grad().weights();
+      std::transform(
+          other.begin(), other.end(), w, w, std::plus<>());
     } else {
       sharedGrad_->grad = std::make_unique<Graph>(false);
       sharedGrad_->grad->sharedGraph_ = sharedGraph_;
-      sharedGrad_->grad->sharedWeights_->weights = other;
+      sharedGrad_->grad->sharedWeights_->deepCopy(
+          other.data(), numArcs(), isCuda(), device());
+    }
+  }
+}
+
+void Graph::addGrad(const float* other) {
+  if (calcGrad()) {
+    std::lock_guard<std::mutex> lock(sharedGrad_->grad_lock);
+    if (isGradAvailable()) {
+      cuda::detail::add(
+          other, grad().weights(), grad().weights(), numArcs(), isCuda());
+    } else {
+      sharedGrad_->grad = std::make_unique<Graph>(false);
+      sharedGrad_->grad->sharedGraph_ = sharedGraph_;
+      sharedGrad_->grad->sharedWeights_->deepCopy(
+          other, numArcs(), isCuda(), device());
     }
   }
 }
@@ -189,12 +223,10 @@ void Graph::addGrad(const Graph& other) {
   if (other.isCuda() != isCuda() || (isCuda() && device() != other.device())) {
     throw std::invalid_argument("[Graph::addGrad] device mismach");
   }
-
-  if (isCuda()) {
-    addGrad(other.weights());
-  } else {
-    addGrad(other.sharedWeights_->weights);
+  if (calcGrad() & other.numArcs() != numArcs()) {
+    throw std::logic_error("[Graph::addGrad] Invalid grad size.");
   }
+  addGrad(other.weights());
 }
 
 void Graph::setCalcGrad(bool calcGrad) {
@@ -218,35 +250,69 @@ std::uintptr_t Graph::id() {
   return reinterpret_cast<std::uintptr_t>(sharedGrad_.get());
 }
 
+namespace {
+inline int sizeUp(size_t size) {
+  auto n = static_cast<int>(ceil(log2(size)));
+  return 1 << n;
+}
+} // namespace
+
+void Graph::SharedGraph::allocHost() {
+  startIds = new int[sizeUp(numStart)];
+  acceptIds = new int[sizeUp(numAccept)];
+  start = new int[sizeUp(numNodes)];
+  accept = new int[sizeUp(numNodes)];
+  inArcOffset = new int[sizeUp(numNodes + 1)];
+  outArcOffset = new int[sizeUp(numNodes + 1)];
+  inArcs = new int[sizeUp(numArcs)];
+  outArcs = new int[sizeUp(numArcs)];
+  ilabels = new int[sizeUp(numArcs)];
+  olabels = new int[sizeUp(numArcs)];
+  srcNodes = new int[sizeUp(numArcs)];
+  dstNodes = new int[sizeUp(numArcs)];
+}
+
+void Graph::SharedGraph::freeHost() {
+  delete[] startIds;
+  delete[] acceptIds;
+  delete[] start;
+  delete[] accept;
+  delete[] ilabels;
+  delete[] olabels;
+  delete[] srcNodes;
+  delete[] dstNodes;
+  if (compiled) {
+    delete[] inArcOffset;
+    delete[] outArcOffset;
+    delete[] inArcs;
+    delete[] outArcs;
+  }
+}
+
+void Graph::SharedWeights::allocHost(size_t numArcs) {
+  weights = new float[sizeUp(numArcs)];
+}
+
+Graph::SharedWeights::~SharedWeights() {
+  if (isCuda) {
+    cuda::detail::free(weights);
+  } else {
+    delete[] weights;
+  }
+}
+
 Graph Graph::deepCopy(const Graph& src) {
+  src.maybeCompile();
   Graph out(src.calcGrad());
-  out.sharedGraph_->numNodes = src.numNodes();
-  out.sharedGraph_->numArcs = src.numArcs();
   out.sharedGraph_->compiled = src.sharedGraph_->compiled;
   out.sharedGraph_->isCuda = src.isCuda();
-  out.sharedGraph_->start = src.sharedGraph_->start;
-  out.sharedGraph_->startIds = src.sharedGraph_->startIds;
-  out.sharedGraph_->accept = src.sharedGraph_->accept;
-  out.sharedGraph_->acceptIds = src.sharedGraph_->acceptIds;
-  out.sharedGraph_->inArcOffset = src.sharedGraph_->inArcOffset;
-  out.sharedGraph_->outArcOffset = src.sharedGraph_->outArcOffset;
-  out.sharedGraph_->inArcs = src.sharedGraph_->inArcs;
-  out.sharedGraph_->outArcs = src.sharedGraph_->outArcs;
-  out.sharedGraph_->ilabels = src.sharedGraph_->ilabels;
-  out.sharedGraph_->olabels = src.sharedGraph_->olabels;
-  out.sharedGraph_->srcNodes = src.sharedGraph_->srcNodes;
-  out.sharedGraph_->dstNodes = src.sharedGraph_->dstNodes;
-  out.sharedWeights_->weights = src.sharedWeights_->weights;
-  if (out.isCuda()) {
-    out.sharedGraph_->device = src.device();
-    out.sharedGraph_->deviceData.deepCopy(
-        src.sharedGraph_->deviceData,
-        src.device());
-    out.sharedWeights_->deepCopy(
-        src.sharedWeights_->deviceWeights,
-        src.numArcs(),
-        src.device());
-  }
+  out.sharedGraph_->device = src.device();
+  out.sharedGraph_->deepCopy(*(src.sharedGraph_));
+  out.sharedWeights_->deepCopy(
+      src.sharedWeights_->weights,
+      src.numArcs(),
+      src.isCuda(),
+      src.device());
   return out;
 }
 
@@ -269,32 +335,26 @@ void Graph::arcSort(bool olabel /* = false */) {
     auto start = sharedGraph_->inArcOffset[i];
     auto end = sharedGraph_->inArcOffset[i + 1];
     std::sort(
-        sharedGraph_->inArcs.begin() + start,
-        sharedGraph_->inArcs.begin() + end,
+        sharedGraph_->inArcs + start,
+        sharedGraph_->inArcs + end,
         sortFn);
     start = sharedGraph_->outArcOffset[i];
     end = sharedGraph_->outArcOffset[i + 1];
     std::sort(
-        sharedGraph_->outArcs.begin() + start,
-        sharedGraph_->outArcs.begin() + end,
+        sharedGraph_->outArcs + start,
+        sharedGraph_->outArcs + end,
         sortFn);
   }
 }
 
 void Graph::setWeights(float* weights) {
-  if (isCuda()) {
-    sharedWeights_->deviceWeights = weights;
-  } else {
-    std::copy(weights, weights + numArcs(), this->weights());
-  }
+  // TODO free old weights
+  sharedWeights_->deepCopy(weights, numArcs(), isCuda(), device());
 }
 
 void Graph::setWeights(const float* weights) {
-  if (isCuda()) {
-    throw std::invalid_argument(
-      "[Graph::setWeights] Weights can only be set on CPU graphs");
-  }
-  setWeights(const_cast<float*>(weights));
+  // TODO free old weights
+  sharedWeights_->deepCopy(weights, numArcs(), isCuda(), device());
 }
 
 void Graph::labelsToArray(int* out, bool ilabel) {
@@ -302,7 +362,7 @@ void Graph::labelsToArray(int* out, bool ilabel) {
     throw std::invalid_argument(
       "[Graph::labelsToArray] Labels can only be retrieved on CPU graphs");
   }
-  // TODO copy the vectors/arrays directly here
+  // TODO std::copy the vectors/arrays directly here
   for (int i = 0; i < numArcs(); ++i) {
     out[i] = ilabel ? this->ilabel(i) : olabel(i);
   }
@@ -312,6 +372,48 @@ std::vector<int> Graph::labelsToVector(bool ilabel) {
   std::vector<int> out(numArcs());
   labelsToArray(out.data(), ilabel);
   return out;
+}
+
+Graph Graph::cpu() const {
+  // No-op if already on CPU
+  if (!sharedGraph_->isCuda) {
+    return *this;
+  }
+  //maybeCompile(); TODO cuda graphs must always be compiled
+  Graph g;
+  auto& od = *(g.sharedGraph_);
+  od.isCuda = false;
+  od.compiled = true;
+  g.setCalcGrad(calcGrad());
+  g.sharedGraph_->deepCopy(*sharedGraph_);
+  g.sharedWeights_->deepCopy(
+      sharedWeights_->weights, numArcs(), false, 0);
+  return g;
+}
+
+Graph Graph::cuda(int device_) const {
+  if (!cuda::isAvailable()) {
+    std::logic_error("[Graph::cuda] CUDA not available.");
+  }
+  // No-op if already on GPU
+  if (isCuda() && device() == device_) {
+    return *this;
+  }
+  maybeCompile();
+  Graph g;
+  auto& od = *(g.sharedGraph_);
+  od.isCuda = true;
+  od.compiled = true;
+  g.setCalcGrad(calcGrad());
+  g.sharedGraph_->device = device_;
+  g.sharedGraph_->deepCopy(*sharedGraph_);
+  g.sharedWeights_->deepCopy(
+      sharedWeights_->weights, numArcs(), g.isCuda(), g.device());
+  return g;
+}
+
+Graph Graph::cuda() const {
+  return cuda(cuda::getDevice());
 }
 
 } // namespace gtn

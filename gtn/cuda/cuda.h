@@ -36,6 +36,7 @@ class DeviceManager {
   int device_;
 };
 
+void add(const float* a, const float* b, float* out, size_t size, bool isCuda);
 float* ones(size_t size, int device);
 
 void free(float* ptr);

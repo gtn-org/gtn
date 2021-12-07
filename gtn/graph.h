@@ -56,29 +56,56 @@ constexpr int epsilon{-1};
 class Graph {
 
  public:
-  // Contains device data when GPU is enabled
-  struct GraphGPU {
-
+  struct SharedGraph {
+    /// Underlying graph data
     size_t numNodes{0};
     size_t numArcs{0};
+    size_t numAccept{0};
+    size_t numStart{0};
 
-    int* start{nullptr};
-    int* accept;
-    int* outArcOffset;
+    int* startIds = new int[0];
+    int* acceptIds = new int[0];
+    int* accept = new int[0];
+    int* start = new int[0];
+
+    // One value per node - i-th value corresponds to i-th node
+    // Last element is the total number of arcs, so that
+    // each element and its neighbor forms a range
     int* inArcOffset;
+    int* outArcOffset;
 
+    // One value per arc
     int* inArcs;
     int* outArcs;
-    int* olabels;
-    int* ilabels;
-    int* srcNodes;
-    int* dstNodes;
 
-    void allocate(size_t numNodes, size_t numArcs);
-    void free();
+    // One value per arc
+    // i-th value corresponds to i-th arc
+    int* ilabels = new int[0];
+    int* olabels = new int[0];
+    int* srcNodes = new int[0];
+    int* dstNodes = new int[0];
 
-    void deepCopy(
-        const GraphGPU& other, int device);
+    // Some optional metadata about the graph
+    bool ilabelSorted{false};
+    bool olabelSorted{false};
+    bool compiled{false};
+
+    // GPU data and metadata
+    bool isCuda{false};
+    int device{0};
+
+    void allocHost();
+    void allocDevice();
+    void freeHost();
+    void freeDevice();
+    void deepCopy(const SharedGraph& other);
+    void free() {
+      if (isCuda) {
+        freeDevice();
+      } else {
+        freeHost();
+      }
+    };
   };
 
   using GradFunc =
@@ -132,25 +159,19 @@ class Graph {
 
   /** The number of arcs in the graph. */
   size_t numArcs() const {
-    if (isCuda()) {
-      return sharedGraph_->deviceData.numArcs;
-    }
     return sharedGraph_->numArcs;
   };
   /** The number of nodes in the graph. */
   size_t numNodes() const {
-    if (isCuda()) {
-      return sharedGraph_->deviceData.numNodes;
-    }
     return sharedGraph_->numNodes;
   };
   /** The number of starting nodes in the graph. */
   size_t numStart() const {
-    return sharedGraph_->startIds.size();
+    return sharedGraph_->numStart;;
   };
   /** The number of accepting nodes in the graph. */
   size_t numAccept() const {
-    return sharedGraph_->acceptIds.size();
+    return sharedGraph_->numAccept;
   };
 
   /** Get the weight on a single arc graph.  */
@@ -206,18 +227,14 @@ class Graph {
    * `Graph::numArcs()` elements.
    */
   float* weights() {
-    return const_cast<float*>(const_cast<const Graph*>(this)->weights());
+    return sharedWeights_->weights;
   }
   /**
    * A `const` version of `Graph::weights`.
    */
   const float* weights() const {
     assert(sharedWeights_ != nullptr);
-    if (isCuda()) {
-      return sharedWeights_->deviceWeights;
-    } else {
-      return sharedWeights_->weights.data();
-    }
+    return sharedWeights_->weights;
   }
 
   /**
@@ -230,7 +247,6 @@ class Graph {
    * Set the arc weights on a graph to the array pointed to by weights.
    */
   void setWeights(float* weights);
-
 
   /**
    * Extract an array of labels from a graph. The array should have space for
@@ -263,13 +279,17 @@ class Graph {
   Graph cuda(int device) const;
 
   /**
-   * Get the `GraphGPU` device data for the graph.
+   * Get the `GraphData` object for the graph.
    */
-  Graph::GraphGPU& deviceData() const {
-    if (!isCuda()) {
-      throw ("[Graph::deviceData] Graph is not on the GPU");
-    }
-    return sharedGraph_->deviceData;
+  const Graph::SharedGraph getData() const {
+    return *sharedGraph_;
+  }
+
+  /**
+   * Get a modifiable `GraphData` object for the graph.
+   */
+  Graph::SharedGraph& getData() {
+    return *sharedGraph_;
   }
 
   /**
@@ -283,9 +303,6 @@ class Graph {
    * Get the GPU device the graph is on.
    */
   int device() const {
-    if (!isCuda()) {
-      throw std::invalid_argument("[Graph::device] Graph is not on the GPU");
-    }
     return sharedGraph_->device;
   }
 
@@ -297,32 +314,21 @@ class Graph {
    */
 
   /**
-   * Add a `std::vector` of gradients to the gradient graph weights without
-   * making a copy of `other`. The `Graph::addGrad` methods are intended for
-   * use by the autograd.
-   * This overload is used with an `rvalue` or `std::move` to avoid an extra
-   * copy:
-   * \code{.cpp}
-   * graph.addGrad(std::move(graphGrad));
-   * \endcode
-   */
-  void addGrad(std::vector<float>&& other);
-
-  /**
    * Add a `std::vector` of gradients to the gradient graph weights. The
    * `Graph::addGrad` methods are intended for use by the autograd.
    */
   void addGrad(const std::vector<float>& other);
 
   /**
-   * Add a `float*` of gradients to the gradient graph weights. This function
-   * is only intended for use by device Graphs.
+   * Add a `float*` of gradients to the gradient graph weights. The gradient
+   * must be on the same device as the graph.
    **/
   void addGrad(const float* grad);
 
   /**
    * Add a `Graph` of gradients to the gradient graph. The `Graph::addGrad`
-   * methods are intended for use by the autograd.
+   * methods are intended for use by the autograd. The input graph `other` must
+   * be on the same device as the graph.
    */
   void addGrad(const Graph& other);
 
@@ -398,12 +404,14 @@ class Graph {
    */
 
   /** Get the indices of the start nodes of the graph. */
-  const std::vector<int>& start() const {
-    return sharedGraph_->startIds;
+  std::vector<int> start() const {
+    return std::vector<int>(
+        sharedGraph_->startIds, sharedGraph_->startIds + numStart());
   };
   /** Get the indices of the accepting nodes of the graph. */
-  const std::vector<int>& accept() const {
-    return sharedGraph_->acceptIds;
+  std::vector<int> accept() const {
+    return std::vector<int>(
+        sharedGraph_->acceptIds, sharedGraph_->acceptIds + numAccept());
   };
   /** Check if the `i`-th node is a start node. */
   bool isStart(size_t i) const {
@@ -414,12 +422,8 @@ class Graph {
     return sharedGraph_->accept[i];
   };
   /** Make the the `i`-th node an accepting node. */
-  void makeAccept(size_t i) {
-    if (!sharedGraph_->accept[i]) {
-      sharedGraph_->acceptIds.push_back(static_cast<int>(i));
-      sharedGraph_->accept[i] = true;
-    }
-  };
+  void makeAccept(size_t i);
+
   /** The number of outgoing arcs from the `i`-th node. */
   size_t numOut(size_t i) const {
     maybeCompile();
@@ -431,8 +435,8 @@ class Graph {
     auto start = sharedGraph_->outArcOffset[i];
     auto end = sharedGraph_->outArcOffset[i + 1];
     return std::vector<int>(
-        sharedGraph_->outArcs.begin() + start,
-        sharedGraph_->outArcs.begin() + end);
+        sharedGraph_->outArcs + start,
+        sharedGraph_->outArcs + end);
   }
   /** Get the index of the `j`-th outgoing arc from the `i`-th node. */
   int out(size_t i, size_t j) const {
@@ -445,13 +449,14 @@ class Graph {
     return sharedGraph_->inArcOffset[i+1] - sharedGraph_->inArcOffset[i];
   }
   /** Get the indices of incoming arcs to the `i`-th node. */
+  // TODO, this could be faster as an iterator
   std::vector<int> in(size_t i) const {
     maybeCompile();
     auto start = sharedGraph_->inArcOffset[i];
     auto end = sharedGraph_->inArcOffset[i + 1];
     return std::vector<int>(
-        sharedGraph_->inArcs.begin() + start,
-        sharedGraph_->inArcs.begin() + end);
+        sharedGraph_->inArcs + start,
+        sharedGraph_->inArcs + end);
   }
   /** Get the index of the `j`-th incoming arc to the `i`-th node. */
   size_t in(size_t i, size_t j) const {
@@ -513,48 +518,15 @@ class Graph {
     }
   }
 
-  struct SharedGraph {
-    /// Underlying graph data
-    size_t numNodes{0};
-    size_t numArcs{0};
-
-    std::vector<int> startIds;
-    std::vector<int> acceptIds;
-    std::vector<int> accept;
-    std::vector<int> start;
-
-    // One value per node - i-th value corresponds to i-th node
-    // Last element is the total number of arcs, so that
-    // each element and its neighbor forms a range
-    std::vector<int> inArcOffset;
-    std::vector<int> outArcOffset;
-
-    // One value per arc
-    std::vector<int> inArcs;
-    std::vector<int> outArcs;
-
-    // One value per arc
-    // i-th value corresponds to i-th arc
-    std::vector<int> ilabels;
-    std::vector<int> olabels;
-    std::vector<int> srcNodes;
-    std::vector<int> dstNodes;
-
-    // Some optional metadata about the graph
-    bool ilabelSorted{false};
-    bool olabelSorted{false};
-    bool compiled{false};
-
-    // GPU data and metadata
-    bool isCuda{false};
-    int device{0};
-    GraphGPU deviceData;
-
-    std::mutex grad_lock;
-    ~SharedGraph() {
-      deviceData.free();
+  void uncompile() {
+    if (sharedGraph_->compiled) {
+      delete[] sharedGraph_->inArcs;
+      delete[] sharedGraph_->outArcs;
+      delete[] sharedGraph_->inArcOffset;
+      delete[] sharedGraph_->outArcOffset;
     }
-  };
+    sharedGraph_->compiled = false;
+  }
 
   struct SharedGrad {
     /// Underlying grad data
@@ -562,16 +534,24 @@ class Graph {
     std::vector<Graph> inputs;
     std::unique_ptr<Graph> grad{nullptr};
     bool calcGrad;
+    std::mutex grad_lock;
   };
 
   struct SharedWeights {
-    std::vector<float> weights;
-    float *deviceWeights{nullptr};
-    void deepCopy(const float *weights, size_t numArcs, int device);
+    bool isCuda{false};
+    float* weights;
+    void allocHost(size_t numArcs);
+    void allocDevice(size_t numArcs, int device);
+    void deepCopy(const float *weights, size_t numArcs, bool isCuda, int device);
     ~SharedWeights();
   };
 
-  std::shared_ptr<SharedGraph> sharedGraph_{std::make_shared<SharedGraph>()};
+  std::shared_ptr<SharedGraph> sharedGraph_{
+    new SharedGraph{},
+    [](SharedGraph *g) {
+      g->free();
+      delete g;}
+  };
   std::shared_ptr<SharedWeights> sharedWeights_{
       std::make_shared<SharedWeights>()};
   std::shared_ptr<SharedGrad> sharedGrad_{std::make_shared<SharedGrad>()};

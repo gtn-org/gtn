@@ -30,7 +30,6 @@ TEST_CASE("Test Graph CUDA", "[Graph.cuda]") {
     g.addArc(0, 1, 0, 1, 0.5);
     // cpu to cpu is a no-op
     CHECK(g.id() == g.cpu().id());
-    CHECK_THROWS(g.device());
     auto gdev = g.cuda();
     CHECK(gdev.numNodes() == g.numNodes());
     CHECK(gdev.numArcs() == g.numArcs());
@@ -40,7 +39,6 @@ TEST_CASE("Test Graph CUDA", "[Graph.cuda]") {
     CHECK_THROWS(gdev.arcSort());
     // gpu to gpu on the same device is a no-op
     CHECK(gdev.id() == gdev.cuda().id());
-
     // Copying to another device or between devices
     if (cuda::deviceCount() > 1) {
       CHECK(equal(g.cuda(1).cpu(), g));

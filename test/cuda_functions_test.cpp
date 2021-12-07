@@ -29,7 +29,7 @@ Graph makeRandomDAG(int num_nodes, int num_arcs) {
   return graph;
 }
 
-TEST_CASE("Test Device Matching", "[cuda::functions]") {
+TEST_CASE("Test Device Matching", "[cuda.functions]") {
   auto g1 = Graph();
   g1.addNode(true);
   g1.addNode(false, true);
@@ -47,7 +47,7 @@ TEST_CASE("Test Device Matching", "[cuda::functions]") {
   }
 }
 
-TEST_CASE("Test Cuda Compose", "[cuda::compose]") {
+TEST_CASE("Test Cuda Compose", "[cuda.compose]") {
   auto check = [](const Graph& g1, const Graph& g2) {
     auto gOut = compose(g1, g2);
     auto gOutP = compose(g1.cuda(), g2.cuda()).cpu();
@@ -193,7 +193,7 @@ TEST_CASE("Test Cuda Compose", "[cuda::compose]") {
   }
 }
 
-TEST_CASE("Test Cuda Compose Epsilon", "[cuda::compose_epsilon]") {
+TEST_CASE("Test Cuda Compose Epsilon", "[cuda.compose_epsilon]") {
   {
     // Simple test case for output epsilon on first graph
     Graph g1;
@@ -446,7 +446,7 @@ TEST_CASE("Test Cuda Compose Epsilon", "[cuda::compose_epsilon]") {
   }
 }
 
-TEST_CASE("Test Cuda Compose Grad", "[cuda::compose_grad]") {
+TEST_CASE("Test Cuda Compose Grad", "[cuda.compose_grad]") {
   Graph first;
   first.addNode(true);
   first.addNode();

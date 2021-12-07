@@ -130,7 +130,7 @@ bool isomorphic(const Graph& g1, const Graph& g2) {
   }
 
   NodeMap visited;
-  std::list<int> g2Start(g2.start().begin(), g2.start().end());
+  auto g2Start = g2.start();
   for (auto s1 : g1.start()) {
     // For each s1, must find isomorphic subgraph starting at a unique s2
     auto it = g2Start.begin();
