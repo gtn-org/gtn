@@ -179,9 +179,13 @@ TEST_CASE("Test copy", "[graph.deepCopy]") {
   CHECK(equal(copied, graph));
   CHECK(copied.calcGrad() == graph.calcGrad());
   CHECK(copied.id() != graph.id());
-
   copied.addArc(0, 3, 0);
   CHECK(!equal(copied, graph));
+
+  graph.arcSort(true);
+  copied = Graph::deepCopy(graph);
+  CHECK(!copied.ilabelSorted());
+  CHECK(copied.olabelSorted());
 }
 
 TEST_CASE("Test arc weight get/set", "[graph.weights]") {
@@ -254,7 +258,6 @@ TEST_CASE("Test gradient functionality", "[graph.grad]") {
     // No gradient
     g.zeroGrad();
     CHECK_THROWS(g.grad());
-
     g.addNode();
     g.addNode();
     g.addArc(0, 1, 0);

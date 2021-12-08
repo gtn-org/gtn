@@ -7,8 +7,6 @@
   cuda::detail::cudaCheck(err, __FILE__, __LINE__)
 #endif
 
-#include "gtn/graph.h"
-
 namespace gtn {
 namespace cuda {
 
@@ -39,7 +37,9 @@ class DeviceManager {
 void add(const float* a, const float* b, float* out, size_t size, bool isCuda);
 float* ones(size_t size, int device);
 
-void free(float* ptr);
+void copy(void* dst, const void* src, size_t size);
+void* allocate(size_t size, int device);
+void free(void* ptr);
 
 #if defined(CUDA)
 void cudaCheck(cudaError_t err, const char* file, int line);

@@ -42,7 +42,6 @@ void add(const float* a, const float* b, float* out, size_t size, bool isCuda) {
   }
 }
 
-
 float* ones(size_t size, int device) {
   DeviceManager dm(device);
   float *res;
@@ -52,8 +51,19 @@ float* ones(size_t size, int device) {
   return res;
 }
 
-void free(float* ptr) {
-  CUDA_CHECK(cudaFree(static_cast<void*>(ptr)));
+void copy(void* dst, const void* src, size_t size) {
+  CUDA_CHECK(cudaMemcpyAsync(dst, src, size, cudaMemcpyDefault));
+}
+
+void* allocate(size_t size, int device) {
+  DeviceManager dm(device);
+  void *res;
+  CUDA_CHECK(cudaMalloc(&res, size));
+  return res;
+}
+
+void free(void* ptr) {
+  CUDA_CHECK(cudaFree(ptr));
 }
 
 void cudaCheck(cudaError_t err, const char* file, int line) {

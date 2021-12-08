@@ -15,6 +15,8 @@
 #include <mutex>
 #include <vector>
 
+#include "hd_span.h"
+
 namespace gtn {
 
 /** The index of the epsilon label. */
@@ -57,54 +59,57 @@ class Graph {
 
  public:
   struct SharedGraph {
+    SharedGraph(bool isCuda = false, int device = 0) :
+      isCuda(isCuda), device(device) { }
+
+    // GPU data and metadata
+    bool isCuda;
+    int device;
+
     /// Underlying graph data
     size_t numNodes{0};
     size_t numArcs{0};
-    size_t numAccept{0};
-    size_t numStart{0};
 
-    int* startIds = new int[0];
-    int* acceptIds = new int[0];
-    int* accept = new int[0];
-    int* start = new int[0];
+    detail::HDSpan<int> startIds;
+    detail::HDSpan<int> acceptIds;
+    detail::HDSpan<int> accept{isCuda, device};
+    detail::HDSpan<int> start{isCuda, device};
 
     // One value per node - i-th value corresponds to i-th node
     // Last element is the total number of arcs, so that
     // each element and its neighbor forms a range
-    int* inArcOffset;
-    int* outArcOffset;
+    detail::HDSpan<int> inArcOffset;
+    detail::HDSpan<int> outArcOffset;
 
     // One value per arc
-    int* inArcs;
-    int* outArcs;
+    detail::HDSpan<int> inArcs{isCuda, device};
+    detail::HDSpan<int> outArcs{isCuda, device};
 
     // One value per arc
     // i-th value corresponds to i-th arc
-    int* ilabels = new int[0];
-    int* olabels = new int[0];
-    int* srcNodes = new int[0];
-    int* dstNodes = new int[0];
+    detail::HDSpan<int> ilabels{isCuda, device};
+    detail::HDSpan<int> olabels{isCuda, device};
+    detail::HDSpan<int> srcNodes{isCuda, device};
+    detail::HDSpan<int> dstNodes{isCuda, device};
 
     // Some optional metadata about the graph
     bool ilabelSorted{false};
     bool olabelSorted{false};
-    bool compiled{false};
+    bool compiled{isCuda};
 
-    // GPU data and metadata
-    bool isCuda{false};
-    int device{0};
-
-    void allocHost();
-    void allocDevice();
-    void freeHost();
-    void freeDevice();
-    void deepCopy(const SharedGraph& other);
     void free() {
-      if (isCuda) {
-        freeDevice();
-      } else {
-        freeHost();
-      }
+      startIds.clear();
+      acceptIds.clear();
+      start.clear();
+      accept.clear();
+      ilabels.clear();
+      olabels.clear();
+      srcNodes.clear();
+      dstNodes.clear();
+      inArcOffset.clear();
+      outArcOffset.clear();
+      inArcs.clear();
+      outArcs.clear();
     };
   };
 
@@ -167,11 +172,11 @@ class Graph {
   };
   /** The number of starting nodes in the graph. */
   size_t numStart() const {
-    return sharedGraph_->numStart;;
+    return sharedGraph_->startIds.size();;
   };
   /** The number of accepting nodes in the graph. */
   size_t numAccept() const {
-    return sharedGraph_->numAccept;
+    return sharedGraph_->acceptIds.size();
   };
 
   /** Get the weight on a single arc graph.  */
@@ -183,6 +188,7 @@ class Graph {
    * autograd tape see `gtn::clone`.
    */
   static Graph deepCopy(const Graph& src);
+  static Graph deepCopy(const Graph& src, bool isCuda, int device = 0);
 
   /**
    * Sort the arcs entering and exiting a node in increasing order by arc in
@@ -227,14 +233,15 @@ class Graph {
    * `Graph::numArcs()` elements.
    */
   float* weights() {
-    return sharedWeights_->weights;
+    assert(sharedWeights_ != nullptr);
+    return sharedWeights_->data();
   }
   /**
    * A `const` version of `Graph::weights`.
    */
   const float* weights() const {
     assert(sharedWeights_ != nullptr);
-    return sharedWeights_->weights;
+    return sharedWeights_->data();
   }
 
   /**
@@ -244,22 +251,9 @@ class Graph {
   void setWeights(const float* weights);
 
   /**
-   * Set the arc weights on a graph to the array pointed to by weights.
-   */
-  void setWeights(float* weights);
-
-  /**
-   * Extract an array of labels from a graph. The array should have space for
-   * `Graph::numArcs()` elements.
+   * Extract a `std::vector` of labels from the graph.
    *
-   * @param[out] out A pointer to the buffer to populate with labels.
    * @param[in] ilabel Retreive ilabels if true, otherwise gets olabels.
-   */
-  void labelsToArray(int* out, bool ilabel = true);
-
-  /**
-   * Extract a `std::vector` of labels from the graph. See
-   * `Graph::labelsToArray`.
    */
   std::vector<int> labelsToVector(bool ilabel = true);
 
@@ -406,12 +400,12 @@ class Graph {
   /** Get the indices of the start nodes of the graph. */
   std::vector<int> start() const {
     return std::vector<int>(
-        sharedGraph_->startIds, sharedGraph_->startIds + numStart());
+        sharedGraph_->startIds.begin(), sharedGraph_->startIds.end());
   };
   /** Get the indices of the accepting nodes of the graph. */
   std::vector<int> accept() const {
     return std::vector<int>(
-        sharedGraph_->acceptIds, sharedGraph_->acceptIds + numAccept());
+        sharedGraph_->acceptIds.begin(), sharedGraph_->acceptIds.end());
   };
   /** Check if the `i`-th node is a start node. */
   bool isStart(size_t i) const {
@@ -435,8 +429,8 @@ class Graph {
     auto start = sharedGraph_->outArcOffset[i];
     auto end = sharedGraph_->outArcOffset[i + 1];
     return std::vector<int>(
-        sharedGraph_->outArcs + start,
-        sharedGraph_->outArcs + end);
+        sharedGraph_->outArcs.begin() + start,
+        sharedGraph_->outArcs.begin() + end);
   }
   /** Get the index of the `j`-th outgoing arc from the `i`-th node. */
   int out(size_t i, size_t j) const {
@@ -455,8 +449,8 @@ class Graph {
     auto start = sharedGraph_->inArcOffset[i];
     auto end = sharedGraph_->inArcOffset[i + 1];
     return std::vector<int>(
-        sharedGraph_->inArcs + start,
-        sharedGraph_->inArcs + end);
+        sharedGraph_->inArcs.begin() + start,
+        sharedGraph_->inArcs.begin() + end);
   }
   /** Get the index of the `j`-th incoming arc to the `i`-th node. */
   size_t in(size_t i, size_t j) const {
@@ -494,12 +488,12 @@ class Graph {
   /** The weight of the `i`-th arc. */
   float weight(size_t i) const {
     assert(sharedWeights_ != nullptr);
-    return sharedWeights_->weights[i];
+    return (*sharedWeights_)[i];
   }
   /** Set the weight of the `i`-th arc. */
   void setWeight(size_t i, float weight) {
     assert(sharedWeights_ != nullptr);
-    sharedWeights_->weights[i] = weight;
+    (*sharedWeights_)[i] = weight;
   }
   /** @}*/
 
@@ -519,12 +513,10 @@ class Graph {
   }
 
   void uncompile() {
-    if (sharedGraph_->compiled) {
-      delete[] sharedGraph_->inArcs;
-      delete[] sharedGraph_->outArcs;
-      delete[] sharedGraph_->inArcOffset;
-      delete[] sharedGraph_->outArcOffset;
-    }
+    sharedGraph_->inArcs.clear();
+    sharedGraph_->outArcs.clear();
+    sharedGraph_->inArcOffset.clear();
+    sharedGraph_->outArcOffset.clear();
     sharedGraph_->compiled = false;
   }
 
@@ -537,23 +529,18 @@ class Graph {
     std::mutex grad_lock;
   };
 
-  struct SharedWeights {
-    bool isCuda{false};
-    float* weights;
-    void allocHost(size_t numArcs);
-    void allocDevice(size_t numArcs, int device);
-    void deepCopy(const float *weights, size_t numArcs, bool isCuda, int device);
-    ~SharedWeights();
-  };
-
   std::shared_ptr<SharedGraph> sharedGraph_{
     new SharedGraph{},
-    [](SharedGraph *g) {
+    [](SharedGraph* g) {
       g->free();
       delete g;}
   };
-  std::shared_ptr<SharedWeights> sharedWeights_{
-      std::make_shared<SharedWeights>()};
+  std::shared_ptr<detail::HDSpan<float>> sharedWeights_{
+    new detail::HDSpan<float>{},
+    [](detail::HDSpan<float>* w) {
+      w->clear();
+      delete w;}
+  };
   std::shared_ptr<SharedGrad> sharedGrad_{std::make_shared<SharedGrad>()};
 };
 
