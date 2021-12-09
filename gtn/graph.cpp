@@ -43,7 +43,9 @@ Graph::Graph(GradFunc gradFunc, std::vector<Graph> inputs) {
     sharedGrad_->calcGrad |= g.calcGrad();
   }
   if (!inputs.empty() && inputs[0].isCuda()) {
-    sharedGraph_ = cuda(inputs[0].device()).sharedGraph_;
+    auto g = cuda(inputs[0].device());
+    sharedGraph_ = g.sharedGraph_;
+    sharedWeights_ = g.sharedWeights_;
   }
   if (calcGrad()) {
     sharedGrad_->gradFunc = std::move(gradFunc);

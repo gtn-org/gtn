@@ -40,15 +40,26 @@ class HDSpan {
  public:
 
   HDSpan() {};
+  HDSpan(int size, T val, bool isCuda = false, int device = 0)
+      : isCuda_(isCuda), device_(device) {
+    resize(size);
+    if (isCuda) {
+      gtn::cuda::detail::fill(data(), val, size);
+    } else {
+      std::fill(data(), data() + size, val);
+    }
+  };
+  HDSpan(int size, bool isCuda = false, int device = 0)
+    : isCuda_(isCuda), device_(device) {
+      resize(size);
+  };
   HDSpan(bool isCuda, int device = 0) : isCuda_(isCuda), device_(device) {};
 
-  const T operator[](size_t idx) const {
-    assert(!isCuda_);
+  __host__ __device__ const T operator[](size_t idx) const {
     return data_[idx];
   };
 
-  T& operator[](size_t idx) {
-    assert(!isCuda_);
+  __host__ __device__ T& operator[](size_t idx) {
     return data_[idx];
   };
 
@@ -101,16 +112,24 @@ class HDSpan {
     return data() + size();
   };
 
-  const T* data() const {
+  __host__ __device__ const T* data() const {
     return data_;
   };
 
-  T* data() {
+  __host__ __device__ T* data() {
     return data_;
   };
 
-  size_t size() const {
+  __host__ __device__ size_t size() const {
     return size_;
+  };
+
+  bool isCuda() const {
+    return isCuda_;
+  };
+
+  int device() const {
+    return device_;
   };
 
   void clear() {

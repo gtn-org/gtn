@@ -4,6 +4,7 @@
 #include <thrust/fill.h>
 
 #include "cuda.h"
+#include "gtn/hd_span.h"
 
 namespace gtn {
 
@@ -42,13 +43,14 @@ void add(const float* a, const float* b, float* out, size_t size, bool isCuda) {
   }
 }
 
-float* ones(size_t size, int device) {
-  DeviceManager dm(device);
-  float *res;
-  CUDA_CHECK(cudaMalloc((void**)(&res), size * sizeof(float)));
-  thrust::device_ptr<float> dPtr(res);
-  thrust::fill(dPtr, dPtr + size, 1.0f);
-  return res;
+void fill(int* dst, int val, size_t size) {
+  thrust::device_ptr<int> dPtr(dst);
+  thrust::fill(dPtr, dPtr + size, val);
+}
+
+void fill(float* dst, float val, size_t size) {
+  thrust::device_ptr<float> dPtr(dst);
+  thrust::fill(dPtr, dPtr + size, val);
 }
 
 void copy(void* dst, const void* src, size_t size) {

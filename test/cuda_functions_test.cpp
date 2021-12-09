@@ -1,8 +1,6 @@
 #define CATCH_CONFIG_MAIN
 
 #include <cmath>
-//#include <cstdlib>
-//#include <sstream>
 
 #include "catch.hpp"
 #include "gtn/gtn.h"

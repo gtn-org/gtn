@@ -35,7 +35,8 @@ class DeviceManager {
 };
 
 void add(const float* a, const float* b, float* out, size_t size, bool isCuda);
-float* ones(size_t size, int device);
+void fill(float* dst, float val, size_t size);
+void fill(int* dst, int val, size_t size);
 
 void copy(void* dst, const void* src, size_t size);
 void* allocate(size_t size, int device);

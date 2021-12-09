@@ -70,16 +70,16 @@ class Graph {
     size_t numNodes{0};
     size_t numArcs{0};
 
-    detail::HDSpan<int> startIds;
-    detail::HDSpan<int> acceptIds;
+    detail::HDSpan<int> startIds{isCuda, device};
+    detail::HDSpan<int> acceptIds{isCuda, device};
     detail::HDSpan<int> accept{isCuda, device};
     detail::HDSpan<int> start{isCuda, device};
 
     // One value per node - i-th value corresponds to i-th node
     // Last element is the total number of arcs, so that
     // each element and its neighbor forms a range
-    detail::HDSpan<int> inArcOffset;
-    detail::HDSpan<int> outArcOffset;
+    detail::HDSpan<int> inArcOffset{isCuda, device};
+    detail::HDSpan<int> outArcOffset{isCuda, device};
 
     // One value per arc
     detail::HDSpan<int> inArcs{isCuda, device};

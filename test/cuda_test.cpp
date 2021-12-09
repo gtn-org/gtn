@@ -97,4 +97,43 @@ TEST_CASE("Test Graph CUDA", "[Graph.cuda]") {
     // Check throws for wrong devices
     CHECK_THROWS(g.addGrad(grad.cpu()));
   }
+
+  {
+    // Device is inherited from inputs
+    Graph g;
+    g.addNode();
+    g.addNode();
+    g.addArc(0, 1, 0);
+    g = g.cuda();
+    auto ng = Graph(nullptr, {g});
+    CHECK(ng.isCuda());
+  }
+}
+
+TEST_CASE("Test Graph Data CUDA", "[Graph.cudaData]") {
+  Graph g;
+  g.addNode();
+  g.addNode();
+  g.addArc(0, 1, 0);
+  g = g.cuda();
+
+  auto check_all = [](auto &data) {
+    CHECK(data.startIds.isCuda());
+    CHECK(data.acceptIds.isCuda());
+    CHECK(data.start.isCuda());
+    CHECK(data.accept.isCuda());
+    CHECK(data.inArcOffset.isCuda());
+    CHECK(data.outArcOffset.isCuda());
+    CHECK(data.inArcs.isCuda());
+    CHECK(data.outArcs.isCuda());
+    CHECK(data.ilabels.isCuda());
+    CHECK(data.olabels.isCuda());
+    CHECK(data.srcNodes.isCuda());
+    CHECK(data.dstNodes.isCuda());
+  };
+  check_all(g.getData());
+
+  g = Graph(nullptr, {g});
+  CHECK(g.isCuda());
+  check_all(g.getData());
 }

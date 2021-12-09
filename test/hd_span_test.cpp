@@ -69,6 +69,27 @@ TEST_CASE("Test HDSpan", "[HDSpan]") {
     s.clear();
     CHECK(allocations == deallocations);
   }
+
+  // Test constructors
+  {
+    HDSpan<int> h(0);
+    CHECK(h.size() == 0);
+  }
+  {
+    HDSpan<int> h(5);
+    CHECK(h.size() == 5);
+  }
+  {
+    HDSpan<int> h(0, 1);
+    CHECK(h.size() == 0);
+  }
+  {
+    HDSpan<int> h(5, 1);
+    CHECK(h.size() == 5);
+    for (int i = 0; i < 5; ++i) {
+      CHECK(h[i] == 1);
+    }
+  }
 }
 
 TEST_CASE("Test HDSpan CUDA", "[HDSpan.cuda]") {
