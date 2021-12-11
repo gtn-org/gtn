@@ -39,8 +39,8 @@ class HDSpan {
 
  public:
 
-  HDSpan() {};
-  HDSpan(int size, T val, bool isCuda = false, int device = 0)
+  explicit HDSpan() {};
+  explicit HDSpan(int size, T val, bool isCuda = false, int device = 0)
       : isCuda_(isCuda), device_(device) {
     resize(size);
     if (isCuda) {
@@ -49,11 +49,12 @@ class HDSpan {
       std::fill(data(), data() + size, val);
     }
   };
-  HDSpan(int size, bool isCuda = false, int device = 0)
+  explicit HDSpan(int size, bool isCuda = false, int device = 0)
     : isCuda_(isCuda), device_(device) {
       resize(size);
   };
-  HDSpan(bool isCuda, int device = 0) : isCuda_(isCuda), device_(device) {};
+  explicit HDSpan(bool isCuda, int device = 0)
+    : isCuda_(isCuda), device_(device) {};
 
   __host__ __device__ const T operator[](size_t idx) const {
     return data_[idx];

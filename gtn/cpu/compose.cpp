@@ -169,8 +169,7 @@ bool addReachableNodeAndArc(
     // Build the node - val of -1 --> uninitialized
     if (newNodes[idx] < 0) {
       newNodes[idx] = ngraph.addNode(
-          first.isStart(dst.first) && second.isStart(dst.second)
-             && !(dst.followFirst || dst.followSecond),
+          false,
           first.isAccept(dst.first) && second.isAccept(dst.second));
       // Explore forward
       toExplore.push(dst);
