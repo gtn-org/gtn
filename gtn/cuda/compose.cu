@@ -42,6 +42,15 @@ struct GradInfo {
   };
 };
 
+struct ExploreNodeAndArcs {
+  int2 arcPair;
+  int2 nodePair;
+  int nodeIdx;
+  bool exploreBoth{false};
+  bool exploreFirst{false};
+  bool exploreSecond{false};
+};
+
 struct ExploreState {
   int first;
   int second;
@@ -100,7 +109,7 @@ std::tuple<int*, int> prefixSumScan(const int* input, size_t numElts) {
   return std::make_tuple(output, sum);
 }
 
-__device__ int binarySearchBinIndex(const int* bins, int size, int tid) {
+__device__ size_t binarySearchBinIndex(const int* bins, int size, int tid) {
   size_t lIdx = 0;
   size_t rIdx = size - 1;
 
@@ -204,7 +213,7 @@ void calculateNumArcsAndNodesToExplore(
     int curIdx,
     int dstIdx,
     const HDSpan<int> reachable,
-    int* newNodes,
+    HDSpan<int> newNodes,
     int* toExplore,
     int* numOutArcs,
     int* numInArcs) {
@@ -343,6 +352,55 @@ void findReachableKernel(
   }
 }
 
+__device__
+ExploreNodeAndArcs getArcPairAndExploreState(
+    const GraphData& g1,
+    const GraphData& g2,
+    const int* arcCrossProductOffset,
+    const HDSpan<int>& exploreIndices,
+    int gTid) {
+  ExploreNodeAndArcs res;
+  auto idx = binarySearchBinIndex(arcCrossProductOffset, exploreIndices.size(), gTid);
+  auto state = indexToState(exploreIndices[idx], g1.numNodes);
+  res.nodePair = make_int2(state.first, state.second);
+  int localIdx = gTid - arcCrossProductOffset[idx];
+  assert(localIdx >= 0);
+
+  auto numArcsFirst =
+      g1.outArcOffset[state.first + 1] - g1.outArcOffset[state.first];
+  auto numArcsSecond =
+      g2.outArcOffset[state.second + 1] - g2.outArcOffset[state.second];
+  assert(numArcsFirst > 0 || numArcsSecond > 0);
+
+  res.nodeIdx = exploreIndices[idx];
+  int firstArcIdx, secondArcIdx;
+  if (numArcsFirst > 0 && numArcsSecond > 0 ) {
+    // Explore everything
+    res.exploreFirst = !state.followSecond && (localIdx / numArcsFirst) == 0;
+    res.exploreSecond = !state.followFirst && (localIdx % numArcsFirst) == 0;
+    firstArcIdx = g1.outArcs[g1.outArcOffset[state.first] + localIdx % numArcsFirst];
+    secondArcIdx = g2.outArcs[g2.outArcOffset[state.second] + localIdx / numArcsFirst];
+    res.exploreBoth = g1.olabels[firstArcIdx] == g2.ilabels[secondArcIdx] &&
+      (g1.olabels[firstArcIdx] != epsilon || !(state.followFirst || state.followSecond));
+  } else if (numArcsSecond == 0 && !state.followSecond) {
+    // Explore first
+    res.exploreFirst = true;
+    firstArcIdx = g1.outArcs[g1.outArcOffset[state.first] + localIdx];
+  } else if (numArcsFirst == 0 && !state.followFirst) {
+    // Explore second
+    res.exploreSecond = true;
+    secondArcIdx = g2.outArcs[g2.outArcOffset[state.second] + localIdx];
+  }
+  if (res.exploreFirst) {
+    res.exploreFirst &= (g1.olabels[firstArcIdx] == epsilon);
+  }
+  if (res.exploreSecond) {
+    res.exploreSecond &= (g2.ilabels[secondArcIdx] == epsilon);
+  }
+  res.arcPair = make_int2(firstArcIdx, secondArcIdx);
+  return res;
+}
+
 __global__ 
 void computeValidNodeAndArcKernel(
       const GraphData g1,
@@ -352,45 +410,17 @@ void computeValidNodeAndArcKernel(
       const HDSpan<int> reachable,
       int totalArcs,
       HDSpan<int> toExplore,
-      int* newNodes,
+      HDSpan<int> newNodes,
       int* numInArcs,
       int* numOutArcs) {
   const int gTid = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (gTid < totalArcs) {
-    auto idx = binarySearchBinIndex(arcCrossProductOffset, exploreIndices.size(), gTid);
-    auto state = indexToState(exploreIndices[idx], g1.numNodes);
-    int localIdx = gTid - arcCrossProductOffset[idx];
-    assert(localIdx >= 0);
-
-    auto numArcsFirst =
-        g1.outArcOffset[state.first + 1] - g1.outArcOffset[state.first];
-    auto numArcsSecond =
-        g2.outArcOffset[state.second + 1] - g2.outArcOffset[state.second];
-
-    const int curIdx = exploreIndices[idx];
-    int firstArcIdx, secondArcIdx;
-    bool exploreFirst = false, exploreSecond = false, exploreBoth  = false;
-    if (numArcsFirst == 0 && numArcsSecond == 0) {
-      // Explore nothing
-    } else if (numArcsFirst > 0 && numArcsSecond > 0 ) {
-      // Explore everything
-      exploreBoth = true;
-      exploreFirst = !state.followSecond && (localIdx / numArcsFirst) == 0;
-      exploreSecond = !state.followFirst && (localIdx % numArcsFirst) == 0;
-      firstArcIdx = g1.outArcs[g1.outArcOffset[state.first] + localIdx % numArcsFirst];
-      secondArcIdx = g2.outArcs[g2.outArcOffset[state.second] + localIdx / numArcsFirst];
-    } else if (numArcsSecond == 0 && !state.followSecond) {
-      // Explore first
-      exploreFirst = true;
-      firstArcIdx = g1.outArcs[g1.outArcOffset[state.first] + localIdx];
-    } else if (numArcsFirst == 0 && !state.followFirst) {
-      // Explore second
-      exploreSecond = true;
-      secondArcIdx = g2.outArcs[g2.outArcOffset[state.second] + localIdx];
-    }
-
-    if (exploreBoth && g1.olabels[firstArcIdx] == g2.ilabels[secondArcIdx]) {
+    auto res = getArcPairAndExploreState(
+        g1, g2, arcCrossProductOffset, exploreIndices, gTid);
+    const int firstArcIdx = res.arcPair.x;
+    const int secondArcIdx = res.arcPair.y;
+    if (res.exploreBoth) {
       const int dstIdx = stateToIndex(
           g1.dstNodes[firstArcIdx],
           g2.dstNodes[secondArcIdx],
@@ -398,24 +428,8 @@ void computeValidNodeAndArcKernel(
           false,
           false);
 
-      if (g1.olabels[firstArcIdx] != epsilon || !(state.followFirst || state.followSecond)) {
-        calculateNumArcsAndNodesToExplore(
-            curIdx,
-            dstIdx,
-            reachable,
-            newNodes,
-            toExplore.data(),
-            numOutArcs,
-            numInArcs);
-      }
-    }
-
-    if (exploreFirst && g1.olabels[firstArcIdx] == epsilon) {
-      const int dstIdx = stateToIndex(
-          g1.dstNodes[firstArcIdx], state.second, g1.numNodes, true, false);
-
       calculateNumArcsAndNodesToExplore(
-          curIdx,
+          res.nodeIdx,
           dstIdx,
           reachable,
           newNodes,
@@ -424,12 +438,26 @@ void computeValidNodeAndArcKernel(
           numInArcs);
     }
 
-    if (exploreSecond && g2.ilabels[secondArcIdx] == epsilon) {
+    if (res.exploreFirst) {
       const int dstIdx = stateToIndex(
-          state.first, g2.dstNodes[secondArcIdx], g1.numNodes, false, true);
+          g1.dstNodes[firstArcIdx], res.nodePair.y, g1.numNodes, true, false);
 
       calculateNumArcsAndNodesToExplore(
-          curIdx,
+          res.nodeIdx,
+          dstIdx,
+          reachable,
+          newNodes,
+          toExplore.data(),
+          numOutArcs,
+          numInArcs);
+    }
+
+    if (res.exploreSecond) {
+      const int dstIdx = stateToIndex(
+          res.nodePair.x, g2.dstNodes[secondArcIdx], g1.numNodes, false, true);
+
+      calculateNumArcsAndNodesToExplore(
+          res.nodeIdx,
           dstIdx,
           reachable,
           newNodes,
@@ -454,44 +482,15 @@ void generateNodeAndArcKernel(
       float* weights,
       int* gradInfoFirst,
       int* gradInfoSecond,
-      int* newNodesOffset
-      ) {
+      int* newNodesOffset) {
   const int gTid = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (gTid < totalArcs) {
-    auto idx = binarySearchBinIndex(arcCrossProductOffset, exploreIndices.size(), gTid);
-    auto state = indexToState(exploreIndices[idx], g1.numNodes);
-    int localIdx = gTid - arcCrossProductOffset[idx];
-    assert(localIdx >= 0);
-
-    auto numArcsFirst =
-        g1.outArcOffset[state.first + 1] - g1.outArcOffset[state.first];
-    auto numArcsSecond =
-        g2.outArcOffset[state.second + 1] - g2.outArcOffset[state.second];
-
-    const int curIdx = exploreIndices[idx];
-    int firstArcIdx, secondArcIdx;
-    bool exploreFirst = false, exploreSecond = false, exploreBoth  = false;
-    if (numArcsFirst == 0 && numArcsSecond == 0) {
-      // Explore nothing
-    } else if (numArcsFirst > 0 && numArcsSecond > 0 ) {
-      // Explore everything
-      exploreBoth = true;
-      exploreFirst = !state.followSecond && (localIdx / numArcsFirst) == 0;
-      exploreSecond = !state.followFirst && (localIdx % numArcsFirst) == 0;
-      firstArcIdx = g1.outArcs[g1.outArcOffset[state.first] + localIdx % numArcsFirst];
-      secondArcIdx = g2.outArcs[g2.outArcOffset[state.second] + localIdx / numArcsFirst];
-    } else if (numArcsSecond == 0 && !state.followSecond) {
-      // Explore first
-      exploreFirst = true;
-      firstArcIdx = g1.outArcs[g1.outArcOffset[state.first] + localIdx];
-    } else if (numArcsFirst == 0 && !state.followFirst) {
-      // Explore second
-      exploreSecond = true;
-      secondArcIdx = g2.outArcs[g2.outArcOffset[state.second] + localIdx];
-    }
-
-    if (exploreBoth && g1.olabels[firstArcIdx] == g2.ilabels[secondArcIdx]) {
+    auto res = getArcPairAndExploreState(
+        g1, g2, arcCrossProductOffset, exploreIndices, gTid);
+    const int firstArcIdx = res.arcPair.x;
+    const int secondArcIdx = res.arcPair.y;
+    if (res.exploreBoth) {
       const int dstIdx = stateToIndex(
           g1.dstNodes[firstArcIdx],
           g2.dstNodes[secondArcIdx],
@@ -499,30 +498,28 @@ void generateNodeAndArcKernel(
           false,
           false);
 
-      if (g1.olabels[firstArcIdx] != epsilon || !(state.followFirst || state.followSecond)) {
-        generateCombinedGraphArcs(
-            dstIdx,
-            curIdx,
-            make_int2(firstArcIdx, secondArcIdx),
-            reachable,
-            newNodesOffset,
-            gradInfoFirst,
-            gradInfoSecond,
-            newGraph,
-            weights,
-            g1.ilabels[firstArcIdx],
-            g2.olabels[secondArcIdx],
-            weightsFirst[firstArcIdx] + weightsSecond[secondArcIdx]);
-      }
+      generateCombinedGraphArcs(
+          dstIdx,
+          res.nodeIdx,
+          make_int2(firstArcIdx, secondArcIdx),
+          reachable,
+          newNodesOffset,
+          gradInfoFirst,
+          gradInfoSecond,
+          newGraph,
+          weights,
+          g1.ilabels[firstArcIdx],
+          g2.olabels[secondArcIdx],
+          weightsFirst[firstArcIdx] + weightsSecond[secondArcIdx]);
     }
 
-    if (exploreFirst && g1.olabels[firstArcIdx] == epsilon) {
+    if (res.exploreFirst) {
       const int dstIdx = stateToIndex(
-          g1.dstNodes[firstArcIdx], state.second, g1.numNodes, true, false);
+          g1.dstNodes[firstArcIdx], res.nodePair.y, g1.numNodes, true, false);
 
       generateCombinedGraphArcs(
           dstIdx,
-          curIdx,
+          res.nodeIdx,
           make_int2(firstArcIdx, -1),
           reachable,
           newNodesOffset,
@@ -535,13 +532,13 @@ void generateNodeAndArcKernel(
           weightsFirst[firstArcIdx]);
     }
 
-    if (exploreSecond && g2.ilabels[secondArcIdx] == epsilon) {
+    if (res.exploreSecond) {
       const int dstIdx = stateToIndex(
-          state.first, g2.dstNodes[secondArcIdx], g1.numNodes, false, true);
+          res.nodePair.x, g2.dstNodes[secondArcIdx], g1.numNodes, false, true);
 
       generateCombinedGraphArcs(
           dstIdx,
-          curIdx,
+          res.nodeIdx,
           make_int2(-1, secondArcIdx),
           reachable,
           newNodesOffset,
@@ -734,7 +731,7 @@ Graph compose(const Graph& first, const Graph& second) {
   findReachableInit(g1, g2, reachable, toExplore); 
 
   // This is the outer control loop that would spawn DP kernels
-  while(checkAnyTrue(toExplore)) { // TODO combine checkAny with boolToIndices
+  while(checkAnyTrue(toExplore)) {
 
     // Convert bits set in toExplore to indices 
     auto exploreIndices = boolToIndices(toExplore);
@@ -813,7 +810,7 @@ Graph compose(const Graph& first, const Graph& second) {
 
       computeValidNodeAndArcKernel<<<gridSize, NT, 0, 0>>>(g1, g2,
         arcCrossProductOffset, exploreIndices, reachable, totalArcs,
-        toExplore, newNodes.data(), numInArcs, numOutArcs);
+        toExplore, newNodes, numInArcs, numOutArcs);
     }
 
     exploreIndices.clear();
