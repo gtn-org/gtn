@@ -8,10 +8,10 @@
 #include <algorithm>
 #include <queue>
 
-#include "gtn/functions/compose.h"
+#include "gtn/cpu/compose.h"
 
 namespace gtn {
-namespace detail {
+namespace cpu {
 namespace {
 
 struct ExploreState {
@@ -64,7 +64,6 @@ void epsilonReachable(
         continue;
       }
     }
-
     auto fn = secondOrFirst ? state.first : first.srcNode(i);
     auto sn = secondOrFirst ? second.srcNode(i) : state.second;
     auto idx = toIndex(fn, sn, first, false, false);
@@ -110,7 +109,6 @@ auto findReachable(
       reachable[idx + 2] = true;
     }
   }
-
   while (!toExplore.empty()) {
     auto curr = toExplore.front();
     toExplore.pop();
@@ -171,8 +169,7 @@ bool addReachableNodeAndArc(
     // Build the node - val of -1 --> uninitialized
     if (newNodes[idx] < 0) {
       newNodes[idx] = ngraph.addNode(
-          first.isStart(dst.first) && second.isStart(dst.second)
-             && !(dst.followFirst || dst.followSecond),
+          false,
           first.isAccept(dst.first) && second.isAccept(dst.second));
       // Explore forward
       toExplore.push(dst);
@@ -253,22 +250,20 @@ void addEpsilonReachableNodes(
 } // namespace
 
 void UnsortedMatcher::match(int lnode, int rnode, bool matchIn /* = false*/) {
-  auto& lv = matchIn ? g1_.in(lnode) : g1_.out(lnode);
-  auto& rv = matchIn ? g2_.in(rnode) : g2_.out(rnode);
-  lIt_ = lv.begin();
-  lItEnd_ = lv.end();
-  rItBegin_ = rIt_ = rv.begin();
-  rItEnd_ = rv.end();
+  lv_ = matchIn ? g1_.in(lnode) : g1_.out(lnode);
+  rv_ = matchIn ? g2_.in(rnode) : g2_.out(rnode);
+  lIt_ = lv_.begin();
+  rIt_ = rv_.begin();
 }
 
 bool UnsortedMatcher::hasNext() {
-  for (; lIt_ != lItEnd_; ++lIt_) {
-    for (; rIt_ != rItEnd_; ++rIt_) {
+  for (; lIt_ != lv_.end(); ++lIt_) {
+    for (; rIt_ != rv_.end(); ++rIt_) {
       if (g1_.olabel(*lIt_) == g2_.ilabel(*rIt_)) {
         return true;
       }
     }
-    rIt_ = rItBegin_;
+    rIt_ = rv_.begin();
   }
   return false;
 }
@@ -287,48 +282,43 @@ void SinglySortedMatcher::match(
     int lnode,
     int rnode,
     bool matchIn /* = false */) {
-  auto& lv = matchIn ? g1_.in(lnode) : g1_.out(lnode);
-  auto& rv = matchIn ? g2_.in(rnode) : g2_.out(rnode);
-
-  searchItBegin_ = searchIt_ = lv.begin();
-  searchItEnd_ = lv.end();
-  queryIt_ = rv.begin();
-  queryItEnd_ = rv.end();
-
+  searchV_ = matchIn ? g1_.in(lnode) : g1_.out(lnode);
+  queryV_ = matchIn ? g2_.in(rnode) : g2_.out(rnode);
   if (!searchG1_) {
-    searchItBegin_ = queryIt_;
-    std::swap(queryIt_, searchIt_);
-    std::swap(queryItEnd_, searchItEnd_);
+    // Swap based on the graph we are searching
+    std::swap(searchV_, queryV_);
   }
+  searchIt_ = searchV_.begin();
+  queryIt_ = queryV_.begin();
 }
 
 bool SinglySortedMatcher::hasNext() {
-  if (queryIt_ == queryItEnd_) {
+  if (queryIt_ == queryV_.end()) {
     return false;
   }
-  if (searchIt_ != searchItEnd_) {
+  if (searchIt_ != searchV_.end()) {
     auto ql = searchG1_ ? g2_.ilabel(*queryIt_) : g1_.olabel(*queryIt_);
     auto sl = searchG1_ ? g1_.olabel(*searchIt_) : g2_.ilabel(*searchIt_);
     if (ql == sl) {
       return true;
     }
   }
-  if (searchIt_ != searchItBegin_) {
+  if (searchIt_ != searchV_.begin()) {
     // Not at the start of the search
     ++queryIt_;
   }
 
   // Update the query pointer and the start of the search range pointer
-  for (; queryIt_ != queryItEnd_; ++queryIt_) {
+  for (; queryIt_ != queryV_.end(); ++queryIt_) {
     auto ql = searchG1_ ? g2_.ilabel(*queryIt_) : g1_.olabel(*queryIt_);
     // Set the comparison function appropriately
     auto comparisonFn = [this](int arc, int val) {
       return searchG1_ ? g1_.olabel(arc) < val : g2_.ilabel(arc) < val;
     };
     searchIt_ =
-        std::lower_bound(searchItBegin_, searchItEnd_, ql, comparisonFn);
+        std::lower_bound(searchV_.begin(), searchV_.end(), ql, comparisonFn);
 
-    if (searchIt_ == searchItEnd_) {
+    if (searchIt_ == searchV_.end()) {
       continue;
     }
 
@@ -352,27 +342,23 @@ void DoublySortedMatcher::match(
     int lnode,
     int rnode,
     bool matchIn /* = false */) {
-  auto& lv = matchIn ? g1_.in(lnode) : g1_.out(lnode);
-  auto& rv = matchIn ? g2_.in(rnode) : g2_.out(rnode);
+  searchV_ = matchIn ? g1_.in(lnode) : g1_.out(lnode);
+  queryV_ = matchIn ? g2_.in(rnode) : g2_.out(rnode);
 
-  searchItBegin_ = searchIt_ = lv.begin();
-  searchItEnd_ = lv.end();
-  queryIt_ = rv.begin();
-  queryItEnd_ = rv.end();
-
-  searchG1_ = lv.size() > rv.size();
+  searchG1_ = searchV_.size() > queryV_.size();
   if (!searchG1_) {
-    searchItBegin_ = queryIt_;
-    std::swap(queryIt_, searchIt_);
-    std::swap(queryItEnd_, searchItEnd_);
+    // Swap based on the graph we are searching
+    std::swap(searchV_, queryV_);
   }
+  searchItBegin_ = searchIt_ = searchV_.begin();
+  queryIt_ = queryV_.begin();
 }
 
 bool DoublySortedMatcher::hasNext() {
-  if (queryIt_ == queryItEnd_) {
+  if (queryIt_ == queryV_.end()) {
     return false;
   }
-  if (searchIt_ != searchItEnd_) {
+  if (searchIt_ != searchV_.end()) {
     auto ql = searchG1_ ? g2_.ilabel(*queryIt_) : g1_.olabel(*queryIt_);
     auto sl = searchG1_ ? g1_.olabel(*searchIt_) : g2_.ilabel(*searchIt_);
     if (ql == sl) {
@@ -385,7 +371,7 @@ bool DoublySortedMatcher::hasNext() {
   }
 
   // Update the query pointer and the start of the search range pointer
-  for (; queryIt_ != queryItEnd_; ++queryIt_) {
+  for (; queryIt_ != queryV_.end(); ++queryIt_) {
     auto ql = searchG1_ ? g2_.ilabel(*queryIt_) : g1_.olabel(*queryIt_);
 
     // Set the comparison function appropriately
@@ -394,8 +380,8 @@ bool DoublySortedMatcher::hasNext() {
     };
     // Allowed because the query vector is sorted.
     searchItBegin_ =
-        std::lower_bound(searchItBegin_, searchItEnd_, ql, comparisonFn);
-    if (searchItBegin_ == searchItEnd_) {
+        std::lower_bound(searchItBegin_, searchV_.end(), ql, comparisonFn);
+    if (searchItBegin_ == searchV_.end()) {
       return false;
     }
 
@@ -424,7 +410,6 @@ Graph compose(
     std::shared_ptr<ArcMatcher> matcher) {
   // Compute reachable nodes from any accept state in the new graph
   auto reachable = findReachable(first, second, matcher);
-
   // Compose the graphs
   Graph ngraph(nullptr, {first, second});
   // Flat representation of nodes in both graphs for all three possible epsilon
@@ -552,5 +537,5 @@ Graph compose(
   return ngraph;
 }
 
-} // namespace detail
+} // namespace cpu
 } // namespace gtn

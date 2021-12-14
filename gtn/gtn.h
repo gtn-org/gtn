@@ -9,6 +9,7 @@
 
 #include "gtn/autograd.h"
 #include "gtn/creations.h"
+#include "gtn/cuda/cuda.h"
 #include "gtn/functions.h"
 #include "gtn/graph.h"
 #include "gtn/parallel.h"

@@ -111,6 +111,12 @@ TEST_CASE("Test Composition", "[functions.compose]") {
   }
 
   {
+    auto g1 = linearGraph(1, 1);
+    auto g2 = linearGraph(2, 1);
+    CHECK(equal(compose(g1, g2), Graph{}));
+  }
+
+  {
     // Self-loop in the composed graph
     Graph g1;
     g1.addNode(true);
@@ -134,6 +140,7 @@ TEST_CASE("Test Composition", "[functions.compose]") {
         "1 1 0\n"
         "1 2 1\n");
     Graph expected = loadTxt(in);
+    compose(g1, g2);
     CHECK(isomorphic(compose(g1, g2), expected));
     CHECK(isomorphic(intersect(g1, g2), expected));
 

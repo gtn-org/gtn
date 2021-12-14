@@ -15,6 +15,8 @@
 #include <mutex>
 #include <vector>
 
+#include "hd_span.h"
+
 namespace gtn {
 
 /** The index of the epsilon label. */
@@ -54,25 +56,63 @@ constexpr int epsilon{-1};
  * max operations and the score for a path is accumulated with addition.
  */
 class Graph {
- private:
-  struct Node {
-    Node(bool start, bool accept) : start(start), accept(accept){};
-    bool start{false};
-    bool accept{false};
-    std::vector<int> in;
-    std::vector<int> out;
-  };
-
-  struct Arc {
-    Arc(int srcNode, int dstNode, int ilabel, int olabel)
-        : srcNode(srcNode), dstNode(dstNode), ilabel(ilabel), olabel(olabel){};
-    int srcNode;
-    int dstNode;
-    int ilabel;
-    int olabel;
-  };
 
  public:
+  struct SharedGraph {
+    SharedGraph(bool isCuda = false, int device = 0) :
+      isCuda(isCuda), device(device) { }
+
+    // GPU data and metadata
+    bool isCuda;
+    int device;
+
+    /// Underlying graph data
+    size_t numNodes{0};
+    size_t numArcs{0};
+
+    detail::HDSpan<int> startIds{isCuda, device};
+    detail::HDSpan<int> acceptIds{isCuda, device};
+    detail::HDSpan<int> accept{isCuda, device};
+    detail::HDSpan<int> start{isCuda, device};
+
+    // One value per node - i-th value corresponds to i-th node
+    // Last element is the total number of arcs, so that
+    // each element and its neighbor forms a range
+    detail::HDSpan<int> inArcOffset{isCuda, device};
+    detail::HDSpan<int> outArcOffset{isCuda, device};
+
+    // One value per arc
+    detail::HDSpan<int> inArcs{isCuda, device};
+    detail::HDSpan<int> outArcs{isCuda, device};
+
+    // One value per arc
+    // i-th value corresponds to i-th arc
+    detail::HDSpan<int> ilabels{isCuda, device};
+    detail::HDSpan<int> olabels{isCuda, device};
+    detail::HDSpan<int> srcNodes{isCuda, device};
+    detail::HDSpan<int> dstNodes{isCuda, device};
+
+    // Some optional metadata about the graph
+    bool ilabelSorted{false};
+    bool olabelSorted{false};
+    bool compiled{isCuda};
+
+    void free() {
+      startIds.clear();
+      acceptIds.clear();
+      start.clear();
+      accept.clear();
+      ilabels.clear();
+      olabels.clear();
+      srcNodes.clear();
+      dstNodes.clear();
+      inArcOffset.clear();
+      outArcOffset.clear();
+      inArcs.clear();
+      outArcs.clear();
+    };
+  };
+
   using GradFunc =
       std::function<void(std::vector<Graph>& inputs, Graph& deltas)>;
   Graph(GradFunc gradFunc, std::vector<Graph> inputs);
@@ -124,19 +164,19 @@ class Graph {
 
   /** The number of arcs in the graph. */
   size_t numArcs() const {
-    return sharedGraph_->arcs.size();
+    return sharedGraph_->numArcs;
   };
   /** The number of nodes in the graph. */
   size_t numNodes() const {
-    return sharedGraph_->nodes.size();
+    return sharedGraph_->numNodes;
   };
   /** The number of starting nodes in the graph. */
   size_t numStart() const {
-    return sharedGraph_->start.size();
+    return sharedGraph_->startIds.size();;
   };
   /** The number of accepting nodes in the graph. */
   size_t numAccept() const {
-    return sharedGraph_->accept.size();
+    return sharedGraph_->acceptIds.size();
   };
 
   /** Get the weight on a single arc graph.  */
@@ -148,6 +188,7 @@ class Graph {
    * autograd tape see `gtn::clone`.
    */
   static Graph deepCopy(const Graph& src);
+  static Graph deepCopy(const Graph& src, bool isCuda, int device = 0);
 
   /**
    * Sort the arcs entering and exiting a node in increasing order by arc in
@@ -210,19 +251,54 @@ class Graph {
   void setWeights(const float* weights);
 
   /**
-   * Extract an array of labels from a graph. The array should have space for
-   * `Graph::numArcs()` elements.
+   * Extract a `std::vector` of labels from the graph.
    *
-   * @param[out] out A pointer to the buffer to populate with labels.
    * @param[in] ilabel Retreive ilabels if true, otherwise gets olabels.
    */
-  void labelsToArray(int* out, bool ilabel = true);
+  std::vector<int> labelsToVector(bool ilabel = true);
 
   /**
-   * Extract a `std::vector` of labels from the graph. See
-   * `Graph::labelsToArray`.
+   * Move the graph to the CPU.
    */
-  std::vector<int> labelsToVector(bool ilabel = true);
+  Graph cpu() const;
+
+  /**
+   * Move the graph to currently active GPU.
+   */
+  Graph cuda() const;
+
+  /**
+   * Move the graph to GPU specified by `device`.
+   */
+  Graph cuda(int device) const;
+
+  /**
+   * Get the `GraphData` object for the graph.
+   */
+  const Graph::SharedGraph getData() const {
+    return *sharedGraph_;
+  }
+
+  /**
+   * Get a modifiable `GraphData` object for the graph.
+   */
+  Graph::SharedGraph& getData() {
+    return *sharedGraph_;
+  }
+
+  /**
+   * Returns true if the graph is on the GPU.
+   */
+  bool isCuda() const {
+    return sharedGraph_->isCuda;
+  }
+
+  /*
+   * Get the GPU device the graph is on.
+   */
+  int device() const {
+    return sharedGraph_->device;
+  }
 
   /** @}*/
 
@@ -232,26 +308,21 @@ class Graph {
    */
 
   /**
-   * Add a `std::vector` of gradients to the gradient graph weights without
-   * making a copy of `other`. The `Graph::addGrad` methods are intended for
-   * use by the autograd.
-   * This overload is used with an `rvalue` or `std::move` to avoid an extra
-   * copy:
-   * \code{.cpp}
-   * graph.addGrad(std::move(graphGrad));
-   * \endcode
-   */
-  void addGrad(std::vector<float>&& other);
-
-  /**
    * Add a `std::vector` of gradients to the gradient graph weights. The
    * `Graph::addGrad` methods are intended for use by the autograd.
    */
   void addGrad(const std::vector<float>& other);
 
   /**
+   * Add a `float*` of gradients to the gradient graph weights. The gradient
+   * must be on the same device as the graph.
+   **/
+  void addGrad(const float* grad);
+
+  /**
    * Add a `Graph` of gradients to the gradient graph. The `Graph::addGrad`
-   * methods are intended for use by the autograd.
+   * methods are intended for use by the autograd. The input graph `other` must
+   * be on the same device as the graph.
    */
   void addGrad(const Graph& other);
 
@@ -327,52 +398,64 @@ class Graph {
    */
 
   /** Get the indices of the start nodes of the graph. */
-  const std::vector<int>& start() const {
-    return sharedGraph_->start;
+  std::vector<int> start() const {
+    return std::vector<int>(
+        sharedGraph_->startIds.begin(), sharedGraph_->startIds.end());
   };
   /** Get the indices of the accepting nodes of the graph. */
-  const std::vector<int>& accept() const {
-    return sharedGraph_->accept;
+  std::vector<int> accept() const {
+    return std::vector<int>(
+        sharedGraph_->acceptIds.begin(), sharedGraph_->acceptIds.end());
   };
   /** Check if the `i`-th node is a start node. */
   bool isStart(size_t i) const {
-    return node(i).start;
+    return sharedGraph_->start[i];
   };
   /** Check if the `i`-th node is an accepting node. */
   bool isAccept(size_t i) const {
-    return node(i).accept;
+    return sharedGraph_->accept[i];
   };
   /** Make the the `i`-th node an accepting node. */
-  void makeAccept(size_t i) {
-    auto& n = node(i);
-    if (!n.accept) {
-      sharedGraph_->accept.push_back(static_cast<int>(i));
-      n.accept = true;
-    }
-  };
+  void makeAccept(size_t i);
+
   /** The number of outgoing arcs from the `i`-th node. */
   size_t numOut(size_t i) const {
-    return node(i).out.size();
+    maybeCompile();
+    return sharedGraph_->outArcOffset[i+1] - sharedGraph_->outArcOffset[i];
   }
   /** Get the indices of outgoing arcs from the `i`-th node. */
-  const std::vector<int>& out(size_t i) const {
-    return node(i).out;
+  std::vector<int> out(size_t i) const {
+    maybeCompile();
+    auto start = sharedGraph_->outArcOffset[i];
+    auto end = sharedGraph_->outArcOffset[i + 1];
+    return std::vector<int>(
+        sharedGraph_->outArcs.begin() + start,
+        sharedGraph_->outArcs.begin() + end);
   }
   /** Get the index of the `j`-th outgoing arc from the `i`-th node. */
   int out(size_t i, size_t j) const {
-    return node(i).out[j];
+    maybeCompile();
+    return sharedGraph_->outArcs[sharedGraph_->outArcOffset[i] + j];
   }
   /** The number of incoming arcs to the `i`-th node. */
   size_t numIn(size_t i) const {
-    return node(i).in.size();
+    maybeCompile();
+    return sharedGraph_->inArcOffset[i+1] - sharedGraph_->inArcOffset[i];
   }
   /** Get the indices of incoming arcs to the `i`-th node. */
-  const std::vector<int>& in(size_t i) const {
-    return node(i).in;
+  // TODO, this could be faster as an iterator
+  std::vector<int> in(size_t i) const {
+    maybeCompile();
+    auto start = sharedGraph_->inArcOffset[i];
+    auto end = sharedGraph_->inArcOffset[i + 1];
+    return std::vector<int>(
+        sharedGraph_->inArcs.begin() + start,
+        sharedGraph_->inArcs.begin() + end);
   }
   /** Get the index of the `j`-th incoming arc to the `i`-th node. */
   size_t in(size_t i, size_t j) const {
-    return node(i).in[j];
+    maybeCompile();
+    return sharedGraph_->inArcs[sharedGraph_->inArcOffset[i] + j];
   }
 
   /** @}*/
@@ -381,25 +464,25 @@ class Graph {
    *  @{
    */
 
-  /** The destination node of the `i`-th arc. */
-  int srcNode(size_t i) const {
-    return arc(i).srcNode;
-  }
   /** The source node of the `i`-th arc. */
+  int srcNode(size_t i) const {
+    return sharedGraph_->srcNodes[i];
+  }
+  /** The destination node of the `i`-th arc. */
   int dstNode(size_t i) const {
-    return arc(i).dstNode;
+    return sharedGraph_->dstNodes[i];
   }
   /** The label of the `i`-th arc (use this for acceptors). */
   int label(size_t i) const {
-    return arc(i).ilabel;
+    return sharedGraph_->ilabels[i];
   }
   /** The input label of the `i`-th arc. */
   int ilabel(size_t i) const {
-    return arc(i).ilabel;
+    return sharedGraph_->ilabels[i];
   }
   /** The output label of the `i`-th arc. */
   int olabel(size_t i) const {
-    return arc(i).olabel;
+    return sharedGraph_->olabels[i];
   }
 
   /** The weight of the `i`-th arc. */
@@ -419,36 +502,23 @@ class Graph {
   size_t addArc(size_t srcNode, size_t dstNode, int label, float) = delete;
   size_t addArc(size_t srcNode, size_t dstNode, int label, double) = delete;
 
-  const Node& node(size_t i) const {
-    // NB: assert gets stripped at in release mode
-    assert(i >= 0 && i < numNodes());
-    return sharedGraph_->nodes[i];
-  }
-  Node& node(size_t i) {
-    return const_cast<Node&>(static_cast<const Graph&>(*this).node(i));
-  }
-  const Arc& arc(size_t i) const {
-    // NB: assert gets stripped at in release mode
-    assert(i >= 0 && i < numArcs());
-    return sharedGraph_->arcs[i];
-  }
-  Arc& arc(size_t i) {
-    return const_cast<Arc&>(static_cast<const Graph&>(*this).arc(i));
+  // Semantically const
+  void compile() const;
+
+  // Semantically const
+  void maybeCompile() const {
+    if (!sharedGraph_->compiled) {
+      compile();
+    }
   }
 
-  struct SharedGraph {
-    /// Underlying graph data
-    std::vector<Arc> arcs;
-    std::vector<Node> nodes;
-    std::vector<int> start;
-    std::vector<int> accept;
-
-    // Some optional metadata about the graph
-    bool ilabelSorted{false};
-    bool olabelSorted{false};
-
-    std::mutex grad_lock;
-  };
+  void uncompile() {
+    sharedGraph_->inArcs.clear();
+    sharedGraph_->outArcs.clear();
+    sharedGraph_->inArcOffset.clear();
+    sharedGraph_->outArcOffset.clear();
+    sharedGraph_->compiled = false;
+  }
 
   struct SharedGrad {
     /// Underlying grad data
@@ -456,11 +526,21 @@ class Graph {
     std::vector<Graph> inputs;
     std::unique_ptr<Graph> grad{nullptr};
     bool calcGrad;
+    std::mutex grad_lock;
   };
 
-  std::shared_ptr<SharedGraph> sharedGraph_{std::make_shared<SharedGraph>()};
-  std::shared_ptr<std::vector<float>> sharedWeights_{
-      std::make_shared<std::vector<float>>()};
+  std::shared_ptr<SharedGraph> sharedGraph_{
+    new SharedGraph{},
+    [](SharedGraph* g) {
+      g->free();
+      delete g;}
+  };
+  std::shared_ptr<detail::HDSpan<float>> sharedWeights_{
+    new detail::HDSpan<float>{},
+    [](detail::HDSpan<float>* w) {
+      w->clear();
+      delete w;}
+  };
   std::shared_ptr<SharedGrad> sharedGrad_{std::make_shared<SharedGrad>()};
 };
 

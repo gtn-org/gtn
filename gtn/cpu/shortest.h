@@ -10,10 +10,10 @@
 #include "gtn/graph.h"
 
 namespace gtn {
-namespace detail {
+namespace cpu {
 
 Graph shortestDistance(const Graph& g, bool tropical = false);
 Graph shortestPath(const Graph& g);
 
-} // namespace detail
+} // namespace cpu
 } // namespace gtn

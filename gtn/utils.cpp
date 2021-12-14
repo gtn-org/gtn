@@ -54,7 +54,7 @@ bool equal(const Graph& g1, const Graph& g2) {
       return false;
     }
 
-    std::list<int> bOut(g2.out(n).begin(), g2.out(n).end());
+    auto bOut = g2.out(n);
     for (auto arcG1 : g1.out(n)) {
       auto it = bOut.begin();
       for (; it != bOut.end(); it++) {
@@ -98,7 +98,7 @@ bool isomorphic(
   }
 
   // Each arc in a has to match with an arc in b
-  std::list<int> bOut(g2.out(g2Node).begin(), g2.out(g2Node).end());
+  auto bOut = g2.out(g2Node);
   for (auto aArc : g1.out(g1Node)) {
     auto it = bOut.begin();
     for (; it != bOut.end(); it++) {
@@ -130,7 +130,7 @@ bool isomorphic(const Graph& g1, const Graph& g2) {
   }
 
   NodeMap visited;
-  std::list<int> g2Start(g2.start().begin(), g2.start().end());
+  auto g2Start = g2.start();
   for (auto s1 : g1.start()) {
     // For each s1, must find isomorphic subgraph starting at a unique s2
     auto it = g2Start.begin();

@@ -14,14 +14,16 @@ find_package(CUDA 9.0)
 option(GTN_BUILD_TESTS "Build tests for gtn" ON)
 option(GTN_BUILD_BENCHMARKS "Build benchmarks for gtn" ON)
 option(GTN_BUILD_EXAMPLES "Build examples for gtn" ON)
-option(GTN_BUILD_EXPERIMENTAL "Build experimental for gtn" ${CUDA_FOUND})
+option(GTN_BUILD_CUDA "Build cuda backend for gtn" ${CUDA_FOUND})
 option(GTN_BUILD_PYTHON_BINDINGS "Build python bindings for gtn" OFF)
 
 # ----------------------------- Dependencies -----------------------------
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-if (GTN_BUILD_EXPERIMENTAL)
+if (GTN_BUILD_CUDA)
+  include_directories(${CUDA_INCLUDE_DIRS})
+  add_definitions(-DCUDA)
   enable_language(CUDA)
   set(CMAKE_CUDA_STANDARD 14)
   set(CMAKE_CUDA_STANDARD_REQUIRED ON)
@@ -38,9 +40,14 @@ add_library(
 )
 
 # Experimental
-if (GTN_BUILD_EXPERIMENTAL)
-  include(${CMAKE_SOURCE_DIR}/gtn/experimental/CMakeLists.txt)
-  target_sources(gtn PRIVATE ${GTN_EXPERIMENTAL_SOURCES})
+if (GTN_BUILD_CUDA)
+  include(${CMAKE_SOURCE_DIR}/gtn/cuda/CMakeLists.txt)
+  target_sources(gtn PRIVATE ${GTN_CUDA_SOURCES})
+  # TODO, better way to set these arch flags
+  target_compile_options(gtn PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-arch=sm_80>)
+else()
+  include(${CMAKE_SOURCE_DIR}/gtn/cuda/CMakeLists.txt)
+  target_sources(gtn PRIVATE ${GTN_NO_CUDA_SOURCES})
 endif()
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/gtn)

@@ -13,7 +13,7 @@
 #include "gtn/graph.h"
 
 namespace gtn {
-namespace detail {
+namespace cpu {
 
 class ArcMatcher {
  public:
@@ -37,11 +37,11 @@ class UnsortedMatcher : public ArcMatcher {
  private:
   const Graph& g1_;
   const Graph& g2_;
+  std::vector<int> lv_;
+  std::vector<int> rv_;
   std::vector<int>::const_iterator lIt_;
-  std::vector<int>::const_iterator lItEnd_;
   std::vector<int>::const_iterator rItBegin_;
   std::vector<int>::const_iterator rIt_;
-  std::vector<int>::const_iterator rItEnd_;
 };
 
 class SinglySortedMatcher : public ArcMatcher {
@@ -58,11 +58,10 @@ class SinglySortedMatcher : public ArcMatcher {
   const Graph& g1_;
   const Graph& g2_;
   bool searchG1_;
+  std::vector<int> searchV_;
+  std::vector<int> queryV_;
   std::vector<int>::const_iterator searchIt_;
-  std::vector<int>::const_iterator searchItBegin_;
-  std::vector<int>::const_iterator searchItEnd_;
   std::vector<int>::const_iterator queryIt_;
-  std::vector<int>::const_iterator queryItEnd_;
 };
 
 class DoublySortedMatcher : public ArcMatcher {
@@ -79,11 +78,11 @@ class DoublySortedMatcher : public ArcMatcher {
   const Graph& g1_;
   const Graph& g2_;
   bool searchG1_;
-  std::vector<int>::const_iterator searchIt_;
-  std::vector<int>::const_iterator searchItBegin_;
-  std::vector<int>::const_iterator searchItEnd_;
-  std::vector<int>::const_iterator queryIt_;
-  std::vector<int>::const_iterator queryItEnd_;
+  std::vector<int> searchV_;
+  std::vector<int> queryV_;
+  std::vector<int>::iterator searchIt_;
+  std::vector<int>::iterator searchItBegin_;
+  std::vector<int>::iterator queryIt_;
 };
 
 /* Composes two transducers. */
@@ -92,5 +91,5 @@ Graph compose(
     const Graph& g2,
     std::shared_ptr<ArcMatcher> matcher);
 
-} // namespace detail
+} // namespace cpu
 } // namespace gtn
