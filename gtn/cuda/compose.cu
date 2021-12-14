@@ -42,32 +42,39 @@ struct GradInfo {
   };
 };
 
-struct nodeAndArcPairGPU {
-  int2 nodePair;
-  int2 arcPair;
-  int2 checkEpsilonArcPair;
-  bool checkArcPair;
-  bool isValid;
+struct ExploreState {
+  int first;
+  int second;
+  bool followFirst;
+  bool followSecond;
 };
 
 inline int div_up(int x, int y) {
   return (x + y - 1) / y;
 }
 
-__device__ __host__
-inline int TwoDToOneDIndex(int n1, int n2, int n1Extent) {
-  assert(n1 < n1Extent);
-  return n1 + n2 * n1Extent;
+__device__
+inline size_t stateToIndex(
+    const int first,
+    const int second,
+    int numFirst,
+    bool followFirst,
+    bool followSecond) {
+  size_t offset = followFirst ? 1 : (followSecond ? 2 : 0);
+  return 3 * (numFirst * second + first) + offset;
 }
 
 __device__
-inline int2 oneDToTwoDIndex(int n, int n1Extent) {
-  assert(n1Extent > 0);
-  const int n2 = n / n1Extent;
-  const int n1 = n % n1Extent;
-  return make_int2(n1, n2);
+inline ExploreState indexToState(size_t n, int numFirst) {
+  ExploreState state;
+  auto offset = n % 3;
+  state.followFirst = (offset == 1);
+  state.followSecond = (offset == 2);
+  n /= 3;
+  state.first = n % numFirst;
+  state.second = n / numFirst;
+  return state;
 }
-
 
 bool checkAnyTrue(const HDSpan<int>& flags) {
   thrust::device_ptr<const int> tPtr(flags.data());
@@ -93,129 +100,67 @@ std::tuple<int*, int> prefixSumScan(const int* input, size_t numElts) {
   return std::make_tuple(output, sum);
 }
 
-__device__
-nodeAndArcPairGPU computeNodeAndArcPair(
-    int tid,
-    const int* arcCrossProductOffset,
-    const HDSpan<int> arcOffsets1,
-    const HDSpan<int> arcOffsets2,
-    const HDSpan<int> exploreIndices) {
+__device__ int binarySearchBinIndex(const int* bins, int size, int tid) {
+  size_t lIdx = 0;
+  size_t rIdx = size - 1;
 
-  nodeAndArcPairGPU result;
-  result.checkArcPair = false;
-  result.checkEpsilonArcPair = make_int2(false, false);
-  result.isValid = false;
+  while (lIdx <= rIdx) {
+    size_t intervalIdx = (lIdx + rIdx) / 2;
+    const int lVal = bins[intervalIdx];
+    const int rVal = bins[intervalIdx + 1];
 
-  int localIdx, numArcs;
-  size_t intervalIdx;
-
-  // There should be at least two values to form a range
-  size_t numArcCrossProductOffset = exploreIndices.size() + 1;
-  assert(numArcCrossProductOffset >= 2);
-  const size_t numIntervals = numArcCrossProductOffset - 1;
-
-  // Binary search
-  {
-    size_t lIdx = 0;
-    size_t rIdx = numIntervals - 1;
-
-    while (lIdx <= rIdx) {
-      intervalIdx = (lIdx + rIdx) / 2;
-      const int lVal = arcCrossProductOffset[intervalIdx];
-      const int rVal = arcCrossProductOffset[intervalIdx + 1];
-
-      if (tid >= rVal) {
-        lIdx = intervalIdx + 1;
-      } else if (tid < lVal) {
-        assert(intervalIdx >= 1);
-        rIdx = intervalIdx - 1;
-      } else {
-        assert((lVal <= tid) && (tid < rVal));
-
-        result.isValid = true;
-        result.nodePair = oneDToTwoDIndex(
-            exploreIndices[intervalIdx], arcOffsets1.size() - 1);
-
-        // The range of idx is from
-        // [0, toExploreNumArcsFirst[intervalIdx] * toExploreNumArcsSecond[intervalIdx])
-        localIdx = tid - lVal;
-        numArcs = rVal - lVal;
-
-        break;
-      }
+    if (tid >= rVal) {
+      lIdx = intervalIdx + 1;
+    } else if (tid < lVal) {
+      assert(intervalIdx >= 1);
+      rIdx = intervalIdx - 1;
+    } else {
+      return intervalIdx;
     }
   }
-
-  if (result.isValid == true) {
-    auto toExploreNumArcsFirst =
-        arcOffsets1[result.nodePair.x + 1] - arcOffsets1[result.nodePair.x];
-    auto toExploreNumArcsSecond =
-        arcOffsets2[result.nodePair.y + 1] - arcOffsets2[result.nodePair.y];
-    assert(localIdx >= 0);
-    assert(localIdx < numArcs);
-    assert(numArcs > 0);
-
-    const int arcProd = toExploreNumArcsFirst * toExploreNumArcsSecond;
-
-    if (numArcs == arcProd) {
-      result.checkArcPair = true;
-
-      // We map the tids to 2D grid where the
-      // x-axis is toExploreNumArcsFirst[i] (row)
-      // y-axis is toExploreNumArcsSecond[i] (column)
-      assert(toExploreNumArcsFirst > 0);
-      result.arcPair = make_int2(
-        localIdx % toExploreNumArcsFirst,
-        localIdx / toExploreNumArcsFirst);
-
-      // Pick the tids from the first row since we need only one
-      // tid per arc of the node from the first graph to check for
-      // epsilon
-      if (localIdx < toExploreNumArcsFirst) {
-        result.checkEpsilonArcPair.x = true;
-      }
-
-      // Pick the tids from the first column since we need only one
-      // tid per arc of the node from the first graph to check for
-      // epsilon
-      if ((localIdx % toExploreNumArcsFirst) == 0) {
-        result.checkEpsilonArcPair.y = true;
-      }
-    } else if ((arcProd == 0) && (numArcs == toExploreNumArcsFirst)) {
-      // TODO: Likely not the brightest idea to use -1 as sentinel
-      result.arcPair = make_int2(localIdx, -1);
-      result.checkEpsilonArcPair.x = true;
-    } else if ((arcProd == 0) && (numArcs == toExploreNumArcsSecond)) {
-      // TODO: Likely not the brightest idea to use -1 as sentinel
-      result.arcPair = make_int2(-1, localIdx);
-      result.checkEpsilonArcPair.y = true;
-    }
-  }
-
-  return result;
+  assert(false);
+  return 0;
 }
 
 __global__
-void calculateArcCrossProductOffsetKernel(
-      const GraphData g1,
-      const GraphData g2,
+void calculateArcCrossProductForwardKernel(
+      const HDSpan<int> arcOffsets1,
+      const HDSpan<int> arcOffsets2,
       const HDSpan<int> exploreIndices,
       int* arcCrossProductOffset,
-      bool inOrOutArc) {
+      int numNodesFirst) {
   const int gTid = blockIdx.x * blockDim.x + threadIdx.x;
   if (gTid < exploreIndices.size()) {
-    int2 idx = oneDToTwoDIndex(exploreIndices[gTid], g1.numNodes);
-    auto arcOffsets = inOrOutArc ? g1.inArcOffset.data() : g1.outArcOffset.data();
-    const int numArcsFirst = arcOffsets[idx.x + 1] - arcOffsets[idx.x];
+    auto state = indexToState(exploreIndices[gTid], numNodesFirst);
+    const int numArcsFirst = arcOffsets1[state.first + 1] - arcOffsets1[state.first];
+    const int numArcsSecond = arcOffsets2[state.second + 1] - arcOffsets2[state.second];
 
-    arcOffsets = inOrOutArc ? g2.inArcOffset.data() : g2.outArcOffset.data();
-    const int numArcsSecond = arcOffsets[idx.y + 1] - arcOffsets[idx.y];
-
-    // Even when numArcsFirst or numArcsSecond is 0 we have to consider
-    // the case when the other graph has arcs with epsilon label
-    if (numArcsFirst != 0 && numArcsSecond == 0) {
+    arcCrossProductOffset[gTid] = numArcsFirst * numArcsSecond;
+    if (numArcsSecond == 0 && !state.followSecond) {
       arcCrossProductOffset[gTid] = numArcsFirst;
-    } else if (numArcsFirst == 0 && numArcsSecond != 0) {
+    }
+    if (numArcsFirst == 0 && !state.followFirst) {
+      arcCrossProductOffset[gTid] = numArcsSecond;
+    }
+  }
+}
+
+__global__
+void calculateArcCrossProductBackwardKernel(
+      const HDSpan<int> arcOffsets1,
+      const HDSpan<int> arcOffsets2,
+      const HDSpan<int> exploreIndices,
+      int* arcCrossProductOffset,
+      int numNodesFirst) {
+  const int gTid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (gTid < exploreIndices.size()) {
+    auto state = indexToState(exploreIndices[gTid], numNodesFirst);
+    const int numArcsFirst = arcOffsets1[state.first + 1] - arcOffsets1[state.first];
+    const int numArcsSecond = arcOffsets2[state.second + 1] - arcOffsets2[state.second];
+
+    if (state.followFirst) {
+      arcCrossProductOffset[gTid] = numArcsFirst;
+    } else if (state.followSecond) {
       arcCrossProductOffset[gTid] = numArcsSecond;
     } else {
       arcCrossProductOffset[gTid] = numArcsFirst * numArcsSecond;
@@ -226,8 +171,7 @@ void calculateArcCrossProductOffsetKernel(
 // Takes a pair of nodes, where each member of pair comes from a different
 // graph and calculate a vector of number of arcs in the cross product of
 // arcs outgoing from each pair.
-// This should be a kernel call
-int* calculateArcCrossProductOffsetGPU(
+int* calculateArcCrossProductOffset(
     const HDSpan<int>& exploreIndices,
     const GraphData g1,
     const GraphData g2,
@@ -240,8 +184,15 @@ int* calculateArcCrossProductOffsetGPU(
   const int NT = 128;
   const int gridSize = div_up(numToExploreNodePair, NT);
 
-  calculateArcCrossProductOffsetKernel<<<gridSize, NT, 0, 0>>>(
-      g1, g2, exploreIndices, arcCrossProductOffset, inOrOutArc);
+  if (inOrOutArc) {
+    calculateArcCrossProductBackwardKernel<<<gridSize, NT, 0, 0>>>(
+        g1.inArcOffset, g2.inArcOffset, exploreIndices,
+        arcCrossProductOffset, g1.numNodes);
+  } else {
+    calculateArcCrossProductForwardKernel<<<gridSize, NT, 0, 0>>>(
+        g1.outArcOffset, g2.outArcOffset, exploreIndices,
+        arcCrossProductOffset, g1.numNodes);
+  }
 
   return arcCrossProductOffset;
 }
@@ -314,74 +265,79 @@ void generateCombinedGraphArcs(
 
 __global__ 
 void findReachableKernel(
-      const GraphData graphDP1GPU,
-      const GraphData graphDP2GPU,
-      const int* arcCrossProductOffsetGPU,
+      const GraphData g1,
+      const GraphData g2,
+      const int* arcCrossProductOffset,
       const HDSpan<int> exploreIndices,
       int totalArcs,
-      HDSpan<int> toExploreGPU,
-      HDSpan<int> reachable,
-      int* epsilonMatchedGPU
-      ) {
+      HDSpan<int> toExplore,
+      HDSpan<int> reachable) {
   const int gTid = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (gTid < totalArcs) {
-    int numNodesFirst = graphDP1GPU.numNodes;
-    nodeAndArcPairGPU result = computeNodeAndArcPair(
-        gTid, arcCrossProductOffsetGPU, graphDP1GPU.inArcOffset,
-        graphDP2GPU.inArcOffset, exploreIndices);
+    auto idx = binarySearchBinIndex(arcCrossProductOffset, exploreIndices.size(), gTid);
+    auto state = indexToState(exploreIndices[idx], g1.numNodes);
+    int localIdx = gTid - arcCrossProductOffset[idx];
+    assert(localIdx >= 0);
 
-    // printf("tid = %d, valid = %d\n", gTid, result.isValid);
-    // Does this node pair match?
-    if (result.isValid) {
-      int inArcOffset = graphDP1GPU.inArcOffset[result.nodePair.x];
-      const int firstArcIdx = graphDP1GPU.inArcs[inArcOffset + result.arcPair.x];
+    auto numArcsFirst =
+        g1.inArcOffset[state.first + 1] - g1.inArcOffset[state.first];
+    auto numArcsSecond =
+        g2.inArcOffset[state.second + 1] - g2.inArcOffset[state.second];
+    assert(numArcsFirst > 0 || numArcsSecond > 0);
 
-      inArcOffset = graphDP2GPU.inArcOffset[result.nodePair.y];
-      const int secondArcIdx = graphDP2GPU.inArcs[inArcOffset + result.arcPair.y];
+    int firstArcIdx, secondArcIdx;
+    if (state.followFirst) {
+      firstArcIdx = g1.inArcs[g1.inArcOffset[state.first] + localIdx];
+    } else if (state.followSecond) {
+      secondArcIdx = g2.inArcs[g2.inArcOffset[state.second] + localIdx];
+    } else {
+      firstArcIdx = g1.inArcs[g1.inArcOffset[state.first] + (localIdx % numArcsFirst)];
+      secondArcIdx = g2.inArcs[g2.inArcOffset[state.second] + (localIdx / numArcsFirst)];
+    }
+    if (!(state.followFirst || state.followSecond) &&
+        (g1.olabels[firstArcIdx] == g2.ilabels[secondArcIdx])) {
+      const int idx = stateToIndex(
+          g1.srcNodes[firstArcIdx],
+          g2.srcNodes[secondArcIdx],
+          g1.numNodes,
+          false, false);
 
-      // printf("tid = %d, cp = %d\n", gTid, result.checkArcPair);
-
-      if (result.checkArcPair &&
-          (graphDP1GPU.olabels[firstArcIdx] == graphDP2GPU.ilabels[secondArcIdx])) {
-        const int idx = TwoDToOneDIndex(
-            graphDP1GPU.srcNodes[firstArcIdx],
-            graphDP2GPU.srcNodes[secondArcIdx],
-            numNodesFirst);
-
-	// printf("tid = %d, idx = %d\n", gTid, idx);
-
-        if (graphDP1GPU.olabels[firstArcIdx] == epsilon) {
-          epsilonMatchedGPU[idx] = true;
-        }
-
-        // idx may not be unique amongst all threads.
-        int oldVal = atomicCAS(&(reachable[idx]), false, true);
+      int oldVal = atomicCAS(&(reachable[idx]), false, true);
+      if (!oldVal) {
+        toExplore[idx] = true;
+      }
+      if (g1.olabels[firstArcIdx] != epsilon) {
+        oldVal = atomicCAS(&(reachable[idx + 1]), false, true);
         if (!oldVal) {
-          toExploreGPU[idx] = true;
+          toExplore[idx + 1] = true;
+        }
+        oldVal = atomicCAS(&(reachable[idx + 2]), false, true);
+        if (!oldVal) {
+          toExplore[idx + 2] = true;
         }
       }
-
-      // Only valid for arcs incoming to node from first graph
-      if (result.checkEpsilonArcPair.x &&
-          (graphDP1GPU.olabels[firstArcIdx] == epsilon)) {
-        const int idx = TwoDToOneDIndex(
-            graphDP1GPU.srcNodes[firstArcIdx], result.nodePair.y, numNodesFirst);
-        int oldVal = atomicCAS(&(reachable[idx]), false, true);
-        if (!oldVal) {
-          toExploreGPU[idx] = true;
-        }
+    } else if (state.followFirst && (g1.olabels[firstArcIdx] == epsilon)) {
+      const int idx = stateToIndex(
+          g1.srcNodes[firstArcIdx], state.second, g1.numNodes, false, false);
+      int oldVal = atomicCAS(&(reachable[idx]), false, true);
+      if (!oldVal) {
+        toExplore[idx] = true;
       }
-
-      // Only valid for arcs incoming to node from second graph
-      if (result.checkEpsilonArcPair.y &&
-          (graphDP2GPU.ilabels[secondArcIdx] == epsilon)) {
-        const int idx = TwoDToOneDIndex(
-            result.nodePair.x, graphDP2GPU.srcNodes[secondArcIdx], numNodesFirst);
-        int oldVal = atomicCAS(&(reachable[idx]), false, true);
-        if (!oldVal) {
-          toExploreGPU[idx] = true;
-        }
+      oldVal = atomicCAS(&(reachable[idx + 1]), false, true);
+      if (!oldVal) {
+        toExplore[idx + 1] = true;
+      }
+    } else if (state.followSecond && (g2.ilabels[secondArcIdx] == epsilon)) {
+      const int idx = stateToIndex(
+          state.first, g2.srcNodes[secondArcIdx], g1.numNodes, false, false);
+      int oldVal = atomicCAS(&(reachable[idx]), false, true);
+      if (!oldVal) {
+        toExplore[idx] = true;
+      }
+      oldVal = atomicCAS(&(reachable[idx + 2]), false, true);
+      if (!oldVal) {
+        toExplore[idx + 2] = true;
       }
     }
   }
@@ -389,231 +345,213 @@ void findReachableKernel(
 
 __global__ 
 void computeValidNodeAndArcKernel(
-      const GraphData graphDP1GPU,
-      const GraphData graphDP2GPU,
-      const int* arcCrossProductOffsetGPU,
+      const GraphData g1,
+      const GraphData g2,
+      const int* arcCrossProductOffset,
       const HDSpan<int> exploreIndices,
       const HDSpan<int> reachable,
-      const int* epsilonMatchedGPU,
       int totalArcs,
       HDSpan<int> toExplore,
       int* newNodes,
-      int* numInArcsGPU,
-      int* numOutArcsGPU
-      ) {
+      int* numInArcs,
+      int* numOutArcs) {
   const int gTid = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (gTid < totalArcs) {
-    int numNodesFirst = graphDP1GPU.numNodes;
-    // Map tid to corresponding node and arc pair
-    // Search to find which node pair this tid will fall into
-    nodeAndArcPairGPU result = computeNodeAndArcPair(
-        gTid, arcCrossProductOffsetGPU, graphDP1GPU.outArcOffset,
-        graphDP2GPU.outArcOffset, exploreIndices);
+    auto idx = binarySearchBinIndex(arcCrossProductOffset, exploreIndices.size(), gTid);
+    auto state = indexToState(exploreIndices[idx], g1.numNodes);
+    int localIdx = gTid - arcCrossProductOffset[idx];
+    assert(localIdx >= 0);
 
-    if (result.isValid) {
-      int outArcOffset = graphDP1GPU.outArcOffset[result.nodePair.x];
-      const int firstArcIdx = graphDP1GPU.outArcs[outArcOffset + result.arcPair.x];
+    auto numArcsFirst =
+        g1.outArcOffset[state.first + 1] - g1.outArcOffset[state.first];
+    auto numArcsSecond =
+        g2.outArcOffset[state.second + 1] - g2.outArcOffset[state.second];
 
-      outArcOffset = graphDP2GPU.outArcOffset[result.nodePair.y];
-      const int secondArcIdx =
-          graphDP2GPU.outArcs[outArcOffset + result.arcPair.y];
+    const int curIdx = exploreIndices[idx];
+    int firstArcIdx, secondArcIdx;
+    bool exploreFirst = false, exploreSecond = false, exploreBoth  = false;
+    if (numArcsFirst == 0 && numArcsSecond == 0) {
+      // Explore nothing
+    } else if (numArcsFirst > 0 && numArcsSecond > 0 ) {
+      // Explore everything
+      exploreBoth = true;
+      exploreFirst = !state.followSecond && (localIdx / numArcsFirst) == 0;
+      exploreSecond = !state.followFirst && (localIdx % numArcsFirst) == 0;
+      firstArcIdx = g1.outArcs[g1.outArcOffset[state.first] + localIdx % numArcsFirst];
+      secondArcIdx = g2.outArcs[g2.outArcOffset[state.second] + localIdx / numArcsFirst];
+    } else if (numArcsSecond == 0 && !state.followSecond) {
+      // Explore first
+      exploreFirst = true;
+      firstArcIdx = g1.outArcs[g1.outArcOffset[state.first] + localIdx];
+    } else if (numArcsFirst == 0 && !state.followFirst) {
+      // Explore second
+      exploreSecond = true;
+      secondArcIdx = g2.outArcs[g2.outArcOffset[state.second] + localIdx];
+    }
 
-      const bool epsilonMatch = epsilonMatchedGPU[TwoDToOneDIndex(
-          result.nodePair.x, result.nodePair.y, numNodesFirst)];
+    if (exploreBoth && g1.olabels[firstArcIdx] == g2.ilabels[secondArcIdx]) {
+      const int dstIdx = stateToIndex(
+          g1.dstNodes[firstArcIdx],
+          g2.dstNodes[secondArcIdx],
+          g1.numNodes,
+          false,
+          false);
 
-      // Does this node pair match?
-      // Skip epsilon matches
-      if (result.checkArcPair &&
-          (graphDP1GPU.olabels[firstArcIdx] == graphDP2GPU.ilabels[secondArcIdx])) {
-        const int dstIdx = TwoDToOneDIndex(
-            graphDP1GPU.dstNodes[firstArcIdx],
-            graphDP2GPU.dstNodes[secondArcIdx],
-            numNodesFirst);
-        const int curIdx =
-            TwoDToOneDIndex(result.nodePair.x, result.nodePair.y, numNodesFirst);
-
-        // printf("krnl 1a dst %d cur %d\n", dstIdx, curIdx);
-
-        // We track if any two arcs outgoing from this node pair match
-        // on epsilon. We record if they do.
-        if (graphDP1GPU.olabels[firstArcIdx] != epsilon) {
-          calculateNumArcsAndNodesToExplore(
-              curIdx,
-              dstIdx,
-              reachable,
-              newNodes,
-              toExplore.data(),
-              numOutArcsGPU,
-              numInArcsGPU);
-        }
-      }
-
-      if (result.checkEpsilonArcPair.x &&
-          (!epsilonMatch || graphDP2GPU.accept[result.nodePair.y] ||
-           !graphDP1GPU.accept[result.nodePair.x]) &&
-          (graphDP1GPU.olabels[firstArcIdx] == epsilon)) {
-        const int dstIdx = TwoDToOneDIndex(
-            graphDP1GPU.dstNodes[firstArcIdx], result.nodePair.y, numNodesFirst);
-        const int curIdx =
-            TwoDToOneDIndex(result.nodePair.x, result.nodePair.y, numNodesFirst);
-
-        // printf("krnl 1b dst %d cur %d\n", dstIdx, curIdx);
-
+      if (g1.olabels[firstArcIdx] != epsilon || !(state.followFirst || state.followSecond)) {
         calculateNumArcsAndNodesToExplore(
             curIdx,
             dstIdx,
             reachable,
             newNodes,
             toExplore.data(),
-            numOutArcsGPU,
-            numInArcsGPU);
+            numOutArcs,
+            numInArcs);
       }
+    }
 
-      if (result.checkEpsilonArcPair.y &&
-          (!epsilonMatch || graphDP1GPU.accept[result.nodePair.x]) &&
-          (graphDP2GPU.ilabels[secondArcIdx] == epsilon)) {
-        const int dstIdx = TwoDToOneDIndex(
-            result.nodePair.x, graphDP2GPU.dstNodes[secondArcIdx], numNodesFirst);
-        const int curIdx =
-            TwoDToOneDIndex(result.nodePair.x, result.nodePair.y, numNodesFirst);
+    if (exploreFirst && g1.olabels[firstArcIdx] == epsilon) {
+      const int dstIdx = stateToIndex(
+          g1.dstNodes[firstArcIdx], state.second, g1.numNodes, true, false);
 
-        // printf("krnl 1c dst %d cur %d\n", dstIdx, curIdx);
+      calculateNumArcsAndNodesToExplore(
+          curIdx,
+          dstIdx,
+          reachable,
+          newNodes,
+          toExplore.data(),
+          numOutArcs,
+          numInArcs);
+    }
 
-        calculateNumArcsAndNodesToExplore(
-            curIdx,
-            dstIdx,
-            reachable,
-            newNodes,
-            toExplore.data(),
-            numOutArcsGPU,
-            numInArcsGPU);
-      }
+    if (exploreSecond && g2.ilabels[secondArcIdx] == epsilon) {
+      const int dstIdx = stateToIndex(
+          state.first, g2.dstNodes[secondArcIdx], g1.numNodes, false, true);
+
+      calculateNumArcsAndNodesToExplore(
+          curIdx,
+          dstIdx,
+          reachable,
+          newNodes,
+          toExplore.data(),
+          numOutArcs,
+          numInArcs);
     }
   }
 }
 
 __global__ 
 void generateNodeAndArcKernel(
-      const GraphData graphDP1GPU,
-      const GraphData graphDP2GPU,
+      const GraphData g1,
+      const GraphData g2,
       const float* weightsFirst,
       const float* weightsSecond,
-      const int* arcCrossProductOffsetGPU,
+      const int* arcCrossProductOffset,
       const HDSpan<int> exploreIndices,
       const HDSpan<int> reachable,
-      const int* epsilonMatchedGPU,
       int totalArcs,
-      GraphData newGraphDPGPU,
+      GraphData newGraph,
       float* weights,
-      int* gradInfoFirstGPU,
-      int* gradInfoSecondGPU,
+      int* gradInfoFirst,
+      int* gradInfoSecond,
       int* newNodesOffset
       ) {
   const int gTid = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (gTid < totalArcs) {
-    int numNodesFirst = graphDP1GPU.numNodes;
-    // Map tid to corresponding node and arc pair
-    // Search to find which node pair this tid will fall into
-    nodeAndArcPairGPU result = computeNodeAndArcPair(
-        gTid, arcCrossProductOffsetGPU, graphDP1GPU.outArcOffset,
-        graphDP2GPU.outArcOffset, exploreIndices);
+    auto idx = binarySearchBinIndex(arcCrossProductOffset, exploreIndices.size(), gTid);
+    auto state = indexToState(exploreIndices[idx], g1.numNodes);
+    int localIdx = gTid - arcCrossProductOffset[idx];
+    assert(localIdx >= 0);
 
-    if (result.isValid) {
-      int outArcOffset = graphDP1GPU.outArcOffset[result.nodePair.x];
-      const int firstArcIdx = graphDP1GPU.outArcs[outArcOffset + result.arcPair.x];
+    auto numArcsFirst =
+        g1.outArcOffset[state.first + 1] - g1.outArcOffset[state.first];
+    auto numArcsSecond =
+        g2.outArcOffset[state.second + 1] - g2.outArcOffset[state.second];
 
-      outArcOffset = graphDP2GPU.outArcOffset[result.nodePair.y];
-      const int secondArcIdx =
-          graphDP2GPU.outArcs[outArcOffset + result.arcPair.y];
+    const int curIdx = exploreIndices[idx];
+    int firstArcIdx, secondArcIdx;
+    bool exploreFirst = false, exploreSecond = false, exploreBoth  = false;
+    if (numArcsFirst == 0 && numArcsSecond == 0) {
+      // Explore nothing
+    } else if (numArcsFirst > 0 && numArcsSecond > 0 ) {
+      // Explore everything
+      exploreBoth = true;
+      exploreFirst = !state.followSecond && (localIdx / numArcsFirst) == 0;
+      exploreSecond = !state.followFirst && (localIdx % numArcsFirst) == 0;
+      firstArcIdx = g1.outArcs[g1.outArcOffset[state.first] + localIdx % numArcsFirst];
+      secondArcIdx = g2.outArcs[g2.outArcOffset[state.second] + localIdx / numArcsFirst];
+    } else if (numArcsSecond == 0 && !state.followSecond) {
+      // Explore first
+      exploreFirst = true;
+      firstArcIdx = g1.outArcs[g1.outArcOffset[state.first] + localIdx];
+    } else if (numArcsFirst == 0 && !state.followFirst) {
+      // Explore second
+      exploreSecond = true;
+      secondArcIdx = g2.outArcs[g2.outArcOffset[state.second] + localIdx];
+    }
 
-      const int curIdx = TwoDToOneDIndex(
-          result.nodePair.x, result.nodePair.y, numNodesFirst);
+    if (exploreBoth && g1.olabels[firstArcIdx] == g2.ilabels[secondArcIdx]) {
+      const int dstIdx = stateToIndex(
+          g1.dstNodes[firstArcIdx],
+          g2.dstNodes[secondArcIdx],
+          g1.numNodes,
+          false,
+          false);
 
-      const bool epsilonMatch = epsilonMatchedGPU[TwoDToOneDIndex(
-          result.nodePair.x, result.nodePair.y, numNodesFirst)];
-
-      // Does this node pair match?
-      if (result.checkArcPair &&
-          (graphDP1GPU.olabels[firstArcIdx] == graphDP2GPU.ilabels[secondArcIdx])) {
-        int2 dstNodePair = make_int2(
-            graphDP1GPU.dstNodes[firstArcIdx], graphDP2GPU.dstNodes[secondArcIdx]);
-
-        const int dstIdx = TwoDToOneDIndex(
-            dstNodePair.x, dstNodePair.y, numNodesFirst);
-
-        // We track if any two arcs outgoing from this node pair match
-        // on epsilon. We record if they do.
-        if (graphDP1GPU.olabels[firstArcIdx] != epsilon) {
-          generateCombinedGraphArcs(
-              dstIdx,
-              curIdx,
-              make_int2(firstArcIdx, secondArcIdx),
-              reachable,
-              newNodesOffset,
-              gradInfoFirstGPU,
-              gradInfoSecondGPU,
-              newGraphDPGPU,
-              weights,
-              graphDP1GPU.ilabels[firstArcIdx],
-              graphDP2GPU.olabels[secondArcIdx],
-              weightsFirst[firstArcIdx] + weightsSecond[secondArcIdx]);
-        }
-      }
-
-      // The epsilon matches
-      if (result.checkEpsilonArcPair.x &&
-          (!epsilonMatch || graphDP2GPU.accept[result.nodePair.y] ||
-           !graphDP1GPU.accept[result.nodePair.x]) &&
-          (graphDP1GPU.olabels[firstArcIdx] == epsilon)) {
-        // When arc from first node has epsilon label then we consider
-        // second node
-        int2 dstNodePair = make_int2(
-            graphDP1GPU.dstNodes[firstArcIdx], result.nodePair.y);
-        const int dstIdx = TwoDToOneDIndex(
-            dstNodePair.x, dstNodePair.y, numNodesFirst);
-
+      if (g1.olabels[firstArcIdx] != epsilon || !(state.followFirst || state.followSecond)) {
         generateCombinedGraphArcs(
             dstIdx,
             curIdx,
-            make_int2(firstArcIdx, -1),
+            make_int2(firstArcIdx, secondArcIdx),
             reachable,
             newNodesOffset,
-            gradInfoFirstGPU,
-            gradInfoSecondGPU,
-            newGraphDPGPU,
+            gradInfoFirst,
+            gradInfoSecond,
+            newGraph,
             weights,
-            graphDP1GPU.ilabels[firstArcIdx],
-            epsilon,
-            weightsFirst[firstArcIdx]);
+            g1.ilabels[firstArcIdx],
+            g2.olabels[secondArcIdx],
+            weightsFirst[firstArcIdx] + weightsSecond[secondArcIdx]);
       }
+    }
 
-      // The epsilon matches
-      if (result.checkEpsilonArcPair.y &&
-          (!epsilonMatch || graphDP1GPU.accept[result.nodePair.x]) &&
-          (graphDP2GPU.ilabels[secondArcIdx] == epsilon)) {
-        // When arc from second node has epsilon label then we consider
-        // first node
-        int2 dstNodePair = make_int2(
-            result.nodePair.x, graphDP2GPU.dstNodes[secondArcIdx]);
-        const int dstIdx = TwoDToOneDIndex(
-            dstNodePair.x, dstNodePair.y, numNodesFirst);
+    if (exploreFirst && g1.olabels[firstArcIdx] == epsilon) {
+      const int dstIdx = stateToIndex(
+          g1.dstNodes[firstArcIdx], state.second, g1.numNodes, true, false);
 
-        generateCombinedGraphArcs(
-            dstIdx,
-            curIdx,
-            make_int2(-1, secondArcIdx),
-            reachable,
-            newNodesOffset,
-            gradInfoFirstGPU,
-            gradInfoSecondGPU,
-            newGraphDPGPU,
-            weights,
-            epsilon,
-            graphDP2GPU.olabels[secondArcIdx],
-            weightsSecond[secondArcIdx]);
-      }
+      generateCombinedGraphArcs(
+          dstIdx,
+          curIdx,
+          make_int2(firstArcIdx, -1),
+          reachable,
+          newNodesOffset,
+          gradInfoFirst,
+          gradInfoSecond,
+          newGraph,
+          weights,
+          g1.ilabels[firstArcIdx],
+          epsilon,
+          weightsFirst[firstArcIdx]);
+    }
+
+    if (exploreSecond && g2.ilabels[secondArcIdx] == epsilon) {
+      const int dstIdx = stateToIndex(
+          state.first, g2.dstNodes[secondArcIdx], g1.numNodes, false, true);
+
+      generateCombinedGraphArcs(
+          dstIdx,
+          curIdx,
+          make_int2(-1, secondArcIdx),
+          reachable,
+          newNodesOffset,
+          gradInfoFirst,
+          gradInfoSecond,
+          newGraph,
+          weights,
+          epsilon,
+          g2.olabels[secondArcIdx],
+          weightsSecond[secondArcIdx]);
     }
   }
 }
@@ -626,26 +564,27 @@ void setStartAndAccept(
     GraphData newGraph) {
   const int gTid = blockIdx.x * blockDim.x + threadIdx.x;
   if (gTid < exploreIndices.size()) {
-    auto idx = oneDToTwoDIndex(exploreIndices[gTid], g1.numNodes);
-    newGraph.start[gTid] = g1.start[idx.x] && g2.start[idx.y];
-    newGraph.accept[gTid] = g1.accept[idx.x] && g2.accept[idx.y];
+    auto state = indexToState(exploreIndices[gTid], g1.numNodes);
+    newGraph.start[gTid] = g1.start[state.first] && g2.start[state.second]
+        && !(state.followFirst || state.followSecond);
+    newGraph.accept[gTid] = g1.accept[state.first] && g2.accept[state.second];
   }
 }
 
 __global__
 void calculateNumArcsKernel(
   const HDSpan<int> nodeIndices,
-  const int* inputInArcsGPU,
-  const int* inputOutArcsGPU,
-  HDSpan<int> outputInArcsGPU,
-  HDSpan<int> outputOutArcsGPU) {
+  const int* inputInArcs,
+  const int* inputOutArcs,
+  HDSpan<int> outputInArcs,
+  HDSpan<int> outputOutArcs) {
 
   const int gTid = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (gTid < nodeIndices.size()) {
     const int index = nodeIndices[gTid];
-    outputInArcsGPU[gTid] = inputInArcsGPU[index];
-    outputOutArcsGPU[gTid] = inputOutArcsGPU[index];
+    outputInArcs[gTid] = inputInArcs[index];
+    outputOutArcs[gTid] = inputOutArcs[index];
   }
 }
 
@@ -661,9 +600,14 @@ void findReachableInitKernel(
   const int sid = blockIdx.y * blockDim.y + threadIdx.y;
 
   if (fid < idsFirst.size() && sid < idsSecond.size()) {
-    auto idx = TwoDToOneDIndex(idsFirst[fid], idsSecond[sid], numNodesFirst);
+    auto idx = stateToIndex(
+        idsFirst[fid], idsSecond[sid], numNodesFirst, false, false);
     toExplore[idx] = true;
     reachable[idx] = true;
+    toExplore[idx + 1] = true;
+    reachable[idx + 1] = true;
+    toExplore[idx + 2] = true;
+    reachable[idx + 2] = true;
   }
 }
 
@@ -692,7 +636,8 @@ void secondPassInitKernel(
   const int sid = blockIdx.y * blockDim.y + threadIdx.y;
 
   if (fid < idsFirst.size() && sid < idsSecond.size()) {
-    auto idx = TwoDToOneDIndex(idsFirst[fid], idsSecond[sid], numNodesFirst);
+    auto idx = stateToIndex(
+        idsFirst[fid], idsSecond[sid], numNodesFirst, false, false);
     if (reachable[idx]) {
       toExplore[idx] = true;
       newNodes[idx] = true;
@@ -758,8 +703,7 @@ auto boolToIndices(const HDSpan<int> vals) {
   const int NT = 128;
   const int gridSize = div_up(vals.size(), NT);
 
-  HDSpan<int> ids{true, vals.device()};
-  ids.resize(numTrue);
+  HDSpan<int> ids(numTrue, true, vals.device());
   boolToIndicesKernel<<<gridSize, NT, 0, 0>>>(ids, counts, vals, vals.size());
   CUDA_CHECK(cudaFree(counts));
   return ids;
@@ -775,7 +719,7 @@ Graph compose(const Graph& first, const Graph& second) {
   auto g1 = first.getData();
   auto g2 = second.getData();
   
-  const int numAllPairNodes = first.numNodes() * second.numNodes();
+  const int numAllPairNodes = 3 * first.numNodes() * second.numNodes();
   const int numNodesFirst = first.numNodes();
 
   // Fixed number of CUDA threads and stream for all kernels
@@ -787,28 +731,24 @@ Graph compose(const Graph& first, const Graph& second) {
   HDSpan<int> reachable(numAllPairNodes, 0, true);
   HDSpan<int> toExplore(numAllPairNodes, 0, true);
 
-  int* epsilonMatchedGPU;
-  CUDA_CHECK(cudaMalloc((void **)(&epsilonMatchedGPU), sizeof(int) * numAllPairNodes));
-  CUDA_CHECK(cudaMemset((void*)epsilonMatchedGPU, false, sizeof(int) * numAllPairNodes));
-
   findReachableInit(g1, g2, reachable, toExplore); 
 
   // This is the outer control loop that would spawn DP kernels
-  while(checkAnyTrue(toExplore)) {
+  while(checkAnyTrue(toExplore)) { // TODO combine checkAny with boolToIndices
 
     // Convert bits set in toExplore to indices 
     auto exploreIndices = boolToIndices(toExplore);
 
-    int* arcCrossProductIndexGPU = calculateArcCrossProductOffsetGPU(
+    int* arcCrossProductIndex = calculateArcCrossProductOffset(
         exploreIndices, g1, g2, true);
 
-    int* arcCrossProductOffsetGPU;
+    int* arcCrossProductOffset;
     int totalArcs;
 
-    std::tie(arcCrossProductOffsetGPU, totalArcs) =
-      prefixSumScan(arcCrossProductIndexGPU, exploreIndices.size());
+    std::tie(arcCrossProductOffset, totalArcs) =
+        prefixSumScan(arcCrossProductIndex, exploreIndices.size());
 
-    CUDA_CHECK(cudaFree(arcCrossProductIndexGPU));
+    CUDA_CHECK(cudaFree(arcCrossProductIndex));
 
     // Reset so pristine state for next frontier to explore
     setZero(toExplore);
@@ -818,12 +758,12 @@ Graph compose(const Graph& first, const Graph& second) {
       const int gridSize = div_up(totalArcs, NT);
 
       findReachableKernel<<<gridSize, NT, 0, 0>>>(
-          g1, g2, arcCrossProductOffsetGPU, exploreIndices,
-          totalArcs, toExplore, reachable, epsilonMatchedGPU);
+          g1, g2, arcCrossProductOffset, exploreIndices,
+          totalArcs, toExplore, reachable);
     }
 
     exploreIndices.clear();
-    CUDA_CHECK(cudaFree(arcCrossProductOffsetGPU));
+    CUDA_CHECK(cudaFree(arcCrossProductOffset));
   } // end while for findReachable
 
   //////////////////////////////////////////////////////////////////////////
@@ -834,14 +774,14 @@ Graph compose(const Graph& first, const Graph& second) {
   //////////////////////////////////////////////////////////////////////////
 
   HDSpan<int> newNodes(numAllPairNodes, 0, true);
-  int* numOutArcsGPU;
-  int* numInArcsGPU;
+  int* numOutArcs;
+  int* numInArcs;
 
-  CUDA_CHECK(cudaMalloc((void **)(&numOutArcsGPU), sizeof(int) * numAllPairNodes));
-  CUDA_CHECK(cudaMalloc((void **)(&numInArcsGPU), sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMalloc((void **)(&numOutArcs), sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMalloc((void **)(&numInArcs), sizeof(int) * numAllPairNodes));
 
-  CUDA_CHECK(cudaMemset((void*)numOutArcsGPU, 0, sizeof(int) * numAllPairNodes));
-  CUDA_CHECK(cudaMemset((void*)numInArcsGPU, 0, sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMemset((void*)numOutArcs, 0, sizeof(int) * numAllPairNodes));
+  CUDA_CHECK(cudaMemset((void*)numInArcs, 0, sizeof(int) * numAllPairNodes));
 
   setZero(toExplore);
 
@@ -853,16 +793,16 @@ Graph compose(const Graph& first, const Graph& second) {
     // Convert bits set in toExplore to node pairs
     auto exploreIndices =  boolToIndices(toExplore);
 
-    int* arcCrossProductIndexGPU = calculateArcCrossProductOffsetGPU(
+    int* arcCrossProductIndex = calculateArcCrossProductOffset(
         exploreIndices, g1, g2, false);
 
-    int* arcCrossProductOffsetGPU;
+    int* arcCrossProductOffset;
     int totalArcs;
 
-    std::tie(arcCrossProductOffsetGPU, totalArcs) =
-      prefixSumScan(arcCrossProductIndexGPU, exploreIndices.size());
+    std::tie(arcCrossProductOffset, totalArcs) =
+      prefixSumScan(arcCrossProductIndex, exploreIndices.size());
 
-    CUDA_CHECK(cudaFree(arcCrossProductIndexGPU));
+    CUDA_CHECK(cudaFree(arcCrossProductIndex));
 
     // Reset so pristine state for next frontier to explore
     setZero(toExplore);
@@ -872,12 +812,12 @@ Graph compose(const Graph& first, const Graph& second) {
       const int gridSize = div_up(totalArcs, NT);
 
       computeValidNodeAndArcKernel<<<gridSize, NT, 0, 0>>>(g1, g2,
-        arcCrossProductOffsetGPU, exploreIndices, reachable, epsilonMatchedGPU,
-        totalArcs, toExplore, newNodes.data(), numInArcsGPU, numOutArcsGPU);
+        arcCrossProductOffset, exploreIndices, reachable, totalArcs,
+        toExplore, newNodes.data(), numInArcs, numOutArcs);
     }
 
     exploreIndices.clear();
-    CUDA_CHECK(cudaFree(arcCrossProductOffsetGPU));
+    CUDA_CHECK(cudaFree(arcCrossProductOffset));
   }
   toExplore.clear();
   reachable.clear();
@@ -887,8 +827,8 @@ Graph compose(const Graph& first, const Graph& second) {
   //////////////////////////////////////////////////////////////////////////
 
   int totalNodes;
-  int* newNodesOffsetGPU;
-  std::tie(newNodesOffsetGPU, totalNodes) = prefixSumScan(newNodes.data(), numAllPairNodes);
+  int* newNodesOffset;
+  std::tie(newNodesOffset, totalNodes) = prefixSumScan(newNodes.data(), numAllPairNodes);
 
   nData.numNodes = totalNodes;
   nData.start.resize(totalNodes);
@@ -905,8 +845,10 @@ Graph compose(const Graph& first, const Graph& second) {
     const int gridSize = div_up(exploreIndices.size(), NT);
 
     calculateNumArcsKernel<<<gridSize, NT, 0, 0>>>(exploreIndices,
-      numInArcsGPU, numOutArcsGPU, nData.inArcOffset, nData.outArcOffset);
+      numInArcs, numOutArcs, nData.inArcOffset, nData.outArcOffset);
   }
+  CUDA_CHECK(cudaFree(numOutArcs));
+  CUDA_CHECK(cudaFree(numInArcs));
 
   int totalInArcs;
   int totalOutArcs;
@@ -917,7 +859,6 @@ Graph compose(const Graph& first, const Graph& second) {
   std::tie(inArcOffsetGPU, totalInArcs) = prefixSumScan(nData.inArcOffset.data(), totalNodes);
 
   std::tie(outArcOffsetGPU, totalOutArcs) = prefixSumScan(nData.outArcOffset.data(), totalNodes);
-
   assert(totalInArcs == totalOutArcs);
   nData.numArcs = totalOutArcs;
   nData.inArcs.resize(totalOutArcs);
@@ -943,16 +884,15 @@ Graph compose(const Graph& first, const Graph& second) {
   //////////////////////////////////////////////////////////////////////////
   // Step 4: Generate nodes and arcs in combined graph
   //////////////////////////////////////////////////////////////////////////
-
-  int* arcCrossProductIndexGPU = calculateArcCrossProductOffsetGPU(
+  int* arcCrossProductIndex = calculateArcCrossProductOffset(
       exploreIndices, g1, g2, false);
 
-  int* arcCrossProductOffsetGPU;
+  int* arcCrossProductOffset;
   int totalArcs;
 
-  std::tie(arcCrossProductOffsetGPU, totalArcs) =
-      prefixSumScan(arcCrossProductIndexGPU, exploreIndices.size());
-  CUDA_CHECK(cudaFree(arcCrossProductIndexGPU));
+  std::tie(arcCrossProductOffset, totalArcs) =
+      prefixSumScan(arcCrossProductIndex, exploreIndices.size());
+  CUDA_CHECK(cudaFree(arcCrossProductIndex));
 
   if (exploreIndices.size() > 0) {
     setZero(nData.start);
@@ -963,28 +903,23 @@ Graph compose(const Graph& first, const Graph& second) {
     nData.startIds = boolToIndices(nData.start);
     nData.acceptIds = boolToIndices(nData.accept);
   }
-
   if (totalArcs > 0) {
-
     const int gridSize = div_up(totalArcs, NT);
 
-    generateNodeAndArcKernel<<<gridSize, NT, 0, 0>>>(g1, g2, first.weights(), second.weights(),
-      arcCrossProductOffsetGPU, exploreIndices, newNodes, epsilonMatchedGPU, totalArcs,
-      nData, nGraph.weights(), gradInfo->first, gradInfo->second, newNodesOffsetGPU);
+    generateNodeAndArcKernel<<<gridSize, NT, 0, 0>>>(g1, g2,
+        first.weights(), second.weights(), arcCrossProductOffset, exploreIndices, newNodes,
+        totalArcs, nData, nGraph.weights(), gradInfo->first, gradInfo->second, newNodesOffset);
   }
 
   exploreIndices.clear();
-  CUDA_CHECK(cudaFree(arcCrossProductOffsetGPU));
+  CUDA_CHECK(cudaFree(arcCrossProductOffset));
 
   // Reset incremented offsets to original value
   nData.inArcOffset.copy(inArcOffsetGPU);
   nData.outArcOffset.copy(outArcOffsetGPU);
 
-  CUDA_CHECK(cudaFree(epsilonMatchedGPU));
   newNodes.clear();
-  CUDA_CHECK(cudaFree(numOutArcsGPU));
-  CUDA_CHECK(cudaFree(numInArcsGPU));
-  CUDA_CHECK(cudaFree(newNodesOffsetGPU));
+  CUDA_CHECK(cudaFree(newNodesOffset));
   CUDA_CHECK(cudaFree(inArcOffsetGPU));
   CUDA_CHECK(cudaFree(outArcOffsetGPU));
 

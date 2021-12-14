@@ -49,11 +49,11 @@ TEST_CASE("Test Cuda Compose", "[cuda.compose]") {
   auto check = [](const Graph& g1, const Graph& g2) {
     auto gOut = compose(g1, g2);
     auto gOutP = compose(g1.cuda(), g2.cuda()).cpu();
-    CHECK(isomorphic(gOut, gOutP));
+    return isomorphic(gOut, gOutP);
   };
 
   // Empty result
-  check(linearGraph(1, 1), linearGraph(2, 1));
+  CHECK(check(linearGraph(1, 1), linearGraph(2, 1)));
 
   // Accepts empty string
   {
@@ -61,18 +61,18 @@ TEST_CASE("Test Cuda Compose", "[cuda.compose]") {
     g1.addNode(true, true);
     auto g2 = Graph();
     g2.addNode(true, true);
-    check(g1, g2);
+    CHECK(check(g1, g2));
   }
 
   // Check some simple chain graphs
-  check(linearGraph(1, 1), linearGraph(1, 1));
-  check(linearGraph(5, 1), linearGraph(5, 1));
-  check(linearGraph(5, 2), linearGraph(5, 1));
-  check(linearGraph(5, 10), linearGraph(5, 1));
-  check(linearGraph(1, 2), linearGraph(1, 2));
-  check(linearGraph(5, 2), linearGraph(5, 2));
-  check(linearGraph(5, 5), linearGraph(5, 3));
-  check(linearGraph(5, 3), linearGraph(5, 5));
+  CHECK(check(linearGraph(1, 1), linearGraph(1, 1)));
+  CHECK(check(linearGraph(5, 1), linearGraph(5, 1)));
+  CHECK(check(linearGraph(5, 2), linearGraph(5, 1)));
+  CHECK(check(linearGraph(5, 10), linearGraph(5, 1)));
+  CHECK(check(linearGraph(1, 2), linearGraph(1, 2)));
+  CHECK(check(linearGraph(5, 2), linearGraph(5, 2)));
+  CHECK(check(linearGraph(5, 5), linearGraph(5, 3)));
+  CHECK(check(linearGraph(5, 3), linearGraph(5, 5)));
 
   // Check some graphs with self-loops!
   {
@@ -80,11 +80,11 @@ TEST_CASE("Test Cuda Compose", "[cuda.compose]") {
     auto g2 = linearGraph(1, 1);
     g1.addArc(0, 0, 0, 0);
     g1.addArc(1, 1, 0, 0);
-    check(g1, g2);
+    CHECK(check(g1, g2));
 
     g2.addArc(0, 0, 0, 0);
     g2.addArc(1, 1, 0, 0);
-    check(g1, g2);
+    CHECK(check(g1, g2));
   }
 
   // Weights combine properly
@@ -95,7 +95,7 @@ TEST_CASE("Test Cuda Compose", "[cuda.compose]") {
     std::vector<float> w2 = {1.1, 2.2, 3.3, 4.4, 5.5, 6.6};
     g1.setWeights(w1.data());
     g2.setWeights(w2.data());
-    check(g1, g2);
+    CHECK(check(g1, g2));
   }
 
   // More complex test cases
@@ -191,7 +191,14 @@ TEST_CASE("Test Cuda Compose", "[cuda.compose]") {
   }
 }
 
-TEST_CASE("Test Cuda Compose Epsilon", "[cuda.compose_epsilon]") {
+TEST_CASE("Test Cuda Compose Epsilon", "[cuda.epsilon_compose]") {
+
+  auto check = [](const Graph& g1, const Graph& g2) {
+    auto gOut = compose(g1, g2);
+    auto gOutP = compose(g1.cuda(), g2.cuda()).cpu();
+    return isomorphic(gOut, gOutP);
+  };
+
   {
     // Simple test case for output epsilon on first graph
     Graph g1;
@@ -205,13 +212,7 @@ TEST_CASE("Test Cuda Compose Epsilon", "[cuda.compose_epsilon]") {
     g2.addNode(false, true);
     g2.addArc(0, 1, 2, 3);
 
-    Graph expected;
-    expected.addNode(true);
-    expected.addNode(false, true);
-    expected.addArc(0, 0, 0, epsilon, 1.0);
-    expected.addArc(0, 1, 1, 3);
-
-    CHECK(equal(compose(g1.cuda(), g2.cuda()).cpu(), expected));
+    CHECK(check(g1, g2));
   }
 
   {
@@ -227,13 +228,99 @@ TEST_CASE("Test Cuda Compose Epsilon", "[cuda.compose_epsilon]") {
     g2.addArc(0, 1, 2, 3);
     g2.addArc(1, 1, epsilon, 0, 2.0);
 
-    Graph expected;
-    expected.addNode(true);
-    expected.addNode(false, true);
-    expected.addArc(0, 1, 1, 3);
-    expected.addArc(1, 1, epsilon, 0, 2.0);
+    CHECK(check(g1, g2));
+  }
 
-    CHECK(equal(compose(g1.cuda(), g2.cuda()).cpu(), expected));
+  // A series of tests making sure we handle redundant epsilon paths correctly
+  {
+    Graph g1;
+    g1.addNode(true, true);
+    g1.addArc(0, 0, 0, epsilon);
+
+    Graph g2;
+    g2.addNode(true);
+    g2.addNode(false, true);
+    g2.addArc(0, 1, epsilon, 0, 1.0);
+
+    CHECK(check(g1, g2));
+  }
+
+  {
+    Graph g1;
+    g1.addNode(true, true);
+    g1.addArc(0, 0, 0, epsilon);
+
+    Graph g2;
+    g2.addNode(true, true);
+    g2.addArc(0, 0, epsilon, 0);
+
+    CHECK(check(g1, g2));
+  }
+
+  {
+    Graph g1;
+    g1.addNode(true, true);
+    g1.addNode(false, true);
+    g1.addArc(0, 1, 0, epsilon);
+    g1.addArc(1, 0, 0, epsilon);
+
+    Graph g2;
+    g2.addNode(true);
+    g2.addNode(false, true);
+    g2.addArc(0, 1, epsilon, 0, 1.0);
+
+    CHECK(check(g1, g2));
+  }
+
+  {
+    Graph g1;
+    g1.addNode(true);
+    g1.addNode(false, true);
+    g1.addArc(0, 1, 0, epsilon);
+    g1.addArc(0, 0, 0, 1);
+
+    Graph g2;
+    g2.addNode(true);
+    g2.addNode(false, true);
+    g2.addArc(0, 1, epsilon, 0);
+    g2.addArc(0, 1, 1, 1);
+
+    CHECK(check(g1, g2));
+  }
+
+  {
+    Graph g1;
+    g1.addNode(true);
+    g1.addNode(false, true);
+    g1.addArc(0, 1, 0, epsilon);
+    g1.addArc(0, 1, 0, 1);
+
+    Graph g2;
+    g2.addNode(true);
+    g2.addNode(false, true);
+    g2.addArc(0, 1, epsilon, 0);
+    g2.addArc(0, 0, 1, 1);
+
+    CHECK(check(g1, g2));
+  }
+
+  {
+    Graph g1;
+    g1.addNode(true);
+    g1.addNode(false, true);
+    g1.addArc(0, 1, 0, epsilon);
+    g1.addArc(0, 1, 0, 1);
+    g1.addArc(0, 0, 1, 0);
+
+
+    Graph g2;
+    g2.addNode(true);
+    g2.addNode(false, true);
+    g2.addArc(0, 1, epsilon, 0);
+    g2.addArc(0, 0, 1, 0);
+    g2.addArc(0, 1, 0, 1);
+
+    CHECK(check(g1, g2));
   }
 
   {
@@ -261,19 +348,7 @@ TEST_CASE("Test Cuda Compose Epsilon", "[cuda.compose_epsilon]") {
     g2.addArc(1, 2, epsilon, symbols["e"]);
     g2.addArc(2, 3, symbols["d"], symbols["a"]);
 
-    Graph expected;
-    expected.addNode(true);
-    expected.addNode();
-    expected.addNode();
-    expected.addNode();
-    expected.addNode(false, true);
-    expected.addArc(0, 1, symbols["a"], symbols["d"]);
-    expected.addArc(1, 2, symbols["b"], symbols["e"]);
-    expected.addArc(2, 3, symbols["c"], epsilon);
-    expected.addArc(3, 4, symbols["d"], symbols["a"]);
-
-    CHECK(
-        randEquivalent(compose(g1.cuda(), g2.cuda()).cpu(), expected));
+    CHECK(check(g1, g2));
   }
 
   {
@@ -291,156 +366,44 @@ TEST_CASE("Test Cuda Compose Epsilon", "[cuda.compose_epsilon]") {
     g2.addArc(0, 1, epsilon, 3, 2.1);
     g2.addArc(0, 1, 1, 2);
 
-    Graph expected;
-    expected.addNode(true);
-    expected.addNode(false, true);
-    expected.addArc(0, 0, 1, epsilon, 1.1);
-    expected.addArc(0, 1, 2, 3, 4.2);
-    expected.addArc(0, 1, 3, 3, 5.2);
-
-    CHECK(
-        randEquivalent(compose(g1.cuda(), g2.cuda()).cpu(), expected));
-  }
-
-  // A series of tests making sure we handle redundant epsilon paths correctly
-  {
-    Graph g1;
-    g1.addNode(true, true);
-    g1.addArc(0, 0, 0, epsilon);
-
-    Graph g2;
-    g2.addNode(true);
-    g2.addNode(false, true);
-    g2.addArc(0, 1, epsilon, 0, 1.0);
-
-    Graph expected;
-    expected.addNode(true);
-    expected.addNode(false, true);
-    expected.addArc(0, 0, 0, epsilon);
-    expected.addArc(0, 1, epsilon, 0, 1.0);
-
-    CHECK(
-        randEquivalent(compose(g1.cuda(), g2.cuda()).cpu(), expected));
-  }
-
-  {
-    Graph g1;
-    g1.addNode(true, true);
-    g1.addArc(0, 0, 0, epsilon);
-
-    Graph g2;
-    g2.addNode(true, true);
-    g2.addArc(0, 0, epsilon, 0);
-
-    Graph expected;
-    expected.addNode(true, true);
-    expected.addArc(0, 0, 0, epsilon);
-    expected.addArc(0, 0, epsilon, 0);
-
-    CHECK(
-        randEquivalent(compose(g1.cuda(), g2.cuda()).cpu(), expected));
-  }
-
-  {
-    Graph g1;
-    g1.addNode(true, true);
-    g1.addNode(false, true);
-    g1.addArc(0, 1, 0, epsilon);
-    g1.addArc(1, 0, 0, epsilon);
-
-    Graph g2;
-    g2.addNode(true);
-    g2.addNode(false, true);
-    g2.addArc(0, 1, epsilon, 0, 1.0);
-
-    Graph expected;
-    expected.addNode(true);
-    expected.addNode(false, true);
-    expected.addArc(0, 1, epsilon, 0, 1.0);
-    expected.addArc(1, 1, 0, epsilon);
-
-    CHECK(
-        randEquivalent(compose(g1.cuda(), g2.cuda()).cpu(), expected));
+    CHECK(check(g1, g2));
   }
 
   {
     Graph g1;
     g1.addNode(true);
     g1.addNode(false, true);
-    g1.addArc(0, 1, 0, epsilon);
-    g1.addArc(0, 0, 0, 1);
+    g1.addNode();
+    g1.addArc(0, 1, 0);
+    g1.addArc(0, 2, epsilon);
 
     Graph g2;
     g2.addNode(true);
+    g2.addNode();
     g2.addNode(false, true);
-    g2.addArc(0, 1, epsilon, 0);
-    g2.addArc(0, 1, 1, 1);
+    g2.addArc(0, 1, epsilon);
+    g2.addArc(1, 2, 0);
 
-    Graph expected;
-    expected.addNode(true);
-    expected.addNode();
-    expected.addNode(false, true);
-    expected.addArc(0, 1, 0, 1);
-    expected.addArc(0, 1, epsilon, 0);
-    expected.addArc(1, 2, 0, epsilon);
-
-    CHECK(
-        randEquivalent(compose(g1.cuda(), g2.cuda()).cpu(), expected));
+    CHECK(check(g1, g2));
   }
 
   {
     Graph g1;
     g1.addNode(true);
+    g1.addNode();
     g1.addNode(false, true);
-    g1.addArc(0, 1, 0, epsilon);
-    g1.addArc(0, 1, 0, 1);
+    g1.addArc(0, 1, epsilon, epsilon, 1);
+    g1.addArc(0, 2, 0, 0, 3);
+    g1.addArc(1, 2, 0, 0, 1);
 
     Graph g2;
     g2.addNode(true);
+    g2.addNode();
     g2.addNode(false, true);
-    g2.addArc(0, 1, epsilon, 0);
-    g2.addArc(0, 0, 1, 1);
+    g2.addArc(0, 1, epsilon, epsilon, 2);
+    g2.addArc(1, 2, 0, 0, 2);
 
-    Graph expected;
-    expected.addNode(true);
-    expected.addNode();
-    expected.addNode(false, true);
-    expected.addArc(0, 1, 0, 1);
-    expected.addArc(0, 1, 0, epsilon);
-    expected.addArc(1, 2, epsilon, 0);
-
-    CHECK(
-        randEquivalent(compose(g1.cuda(), g2.cuda()).cpu(), expected));
-  }
-
-  {
-    Graph g1;
-    g1.addNode(true);
-    g1.addNode(false, true);
-    g1.addArc(0, 1, 0, epsilon);
-    g1.addArc(0, 1, 0, 1);
-    g1.addArc(0, 0, 1, 0);
-
-    Graph g2;
-    g2.addNode(true);
-    g2.addNode(false, true);
-    g2.addArc(0, 1, epsilon, 0);
-    g2.addArc(0, 0, 1, 0);
-    g2.addArc(0, 1, 0, 1);
-
-    Graph expected;
-    expected.addNode(true);
-    expected.addNode();
-    expected.addNode();
-    expected.addNode(false, true);
-    expected.addArc(0, 1, 1, 1);
-    expected.addArc(0, 1, epsilon, 0);
-    expected.addArc(0, 2, 0, 0);
-    expected.addArc(2, 3, epsilon, 0);
-    expected.addArc(1, 3, 0, epsilon);
-
-    CHECK(
-        randEquivalent(compose(g1.cuda(), g2.cuda()).cpu(), expected));
+    CHECK(check(g1, g2));
   }
 }
 
@@ -490,67 +453,44 @@ TEST_CASE("Test Cuda Compose Grad", "[cuda.compose_grad]") {
   }
 }
 
-/*
-void testEpsilonGrad() {
+
+
+TEST_CASE("Test Cuda Compose Epsilon Grad", "[cuda.epsilon_compose_grad]") {
   Graph first;
   first.addNode(true);
+  first.addNode();
+  first.addNode();
+  first.addNode();
   first.addNode(false, true);
-  first.addArc(0, 0, 0, 3, 0);
-  first.addArc(0, 1, 1, 4, 0);
-  first.addArc(1, 1, 2, 5, 0);
-  first.addArc(0, 1, 2, gtn::epsilon, 0);
+  first.addArc(0, 1, 0, 0);
+  first.addArc(1, 2, 1, epsilon);
+  first.addArc(2, 3, 2, epsilon);
+  first.addArc(3, 4, 3, 3);
 
   Graph second;
   second.addNode(true);
   second.addNode();
   second.addNode();
   second.addNode(false, true);
-  second.addArc(0, 1, 3, 0, 0);
-  second.addArc(0, 1, 3, 1, 0);
-  second.addArc(0, 1, 4, 2, 0);
-  second.addArc(0, 1, gtn::epsilon, 2, 0.0); // idx 3
-  second.addArc(1, 2, 3, 0, 0);
-  second.addArc(1, 2, 4, 1, 0);
-  second.addArc(1, 2, 5, 2, 0);
-  second.addArc(1, 2, gtn::epsilon, 2, 0.0); // idx 7
-  second.addArc(2, 3, 4, 0, 0);
-  second.addArc(2, 3, 5, 1, 0);
-  second.addArc(2, 3, 5, 2, 0);
-  second.addArc(2, 3, gtn::epsilon, 2, 0.0); // idx 11
+  second.addArc(0, 1, 0, 3);
+  second.addArc(1, 2, epsilon, 4);
+  second.addArc(2, 3, 3, 0);
 
-  Graph expected =
-      loadTxt(std::stringstream("0\n"
-                                "6\n"
-                                "0 1 0 0 0\n"
-                                "0 1 0 1 0\n"
-                                "0 3 2 -1 0\n"
-                                "0 4 1 2 0\n"
-                                "1 2 0 0 0\n"
-                                "1 4 2 -1 0\n"
-                                "1 5 1 1 0\n"
-                                "2 5 2 -1 0\n"
-                                "2 6 1 0 0\n"
-                                "3 4 -1 2 0\n"
-                                "4 5 2 2 0\n"
-                                "4 5 -1 2 0\n"
-                                "5 6 2 1 0\n"
-                                "5 6 2 2 0\n"
-                                "5 6 -1 2 0\n"));
-
-  Graph composed = gtn::detail::dataparallel::compose(first, second);
-  CHECK(randEquivalent(composed, expected));
-
+  first = first.cuda();
+  second = second.cuda();
+  auto composed = compose(first, second);
   backward(composed);
 
-  auto& grad1 = first.grad();
-  auto& grad2 = second.grad();
-  std::vector<float> expectedFirstGrad = {3, 3, 3, 3};
-  std::vector<float> expectedSecondGrad = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
-  for (size_t i = 0; i < grad1.numArcs(); ++i) {
-    CHECK(grad1.weights()[i] == expectedFirstGrad[i]);
+  auto firstGrad = first.grad().cpu();
+  auto secondGrad = second.grad().cpu();
+
+  std::vector<float> expectedFirst= {1, 1, 1, 1};
+  std::vector<float> expectedSecond = {1, 1, 1};
+  for (int i = 0; i < firstGrad.numArcs(); i++) {
+    CHECK(expectedFirst[i] == firstGrad.weight(i));
   }
-  for (size_t i = 0; i < grad2.numArcs(); ++i) {
-    CHECK(grad2.weights()[i] == expectedSecondGrad[i]);
+  for (int i = 0; i < secondGrad.numArcs(); i++) {
+    CHECK(expectedSecond[i] == secondGrad.weight(i));
   }
 }
 
@@ -564,11 +504,11 @@ Graph makeChainGraph(const std::vector<int>& input) {
   return chain;
 }
 
-void testComposeEditDistance() {
-  auto computeEditDistance = [](std::function<Graph(Graph, Graph)> compose,
-                                const int numTokens,
+TEST_CASE("Test Edit Distance", "[cuda.edit_distance]") {
+  auto computeEditDistance = [](const int numTokens,
                                 const std::vector<int>& x,
-                                const std::vector<int>& y) {
+                                const std::vector<int>& y,
+                                bool useCuda) {
     // Make edits graph
     Graph edits(false);
     edits.addNode(true, true);
@@ -588,13 +528,18 @@ void testComposeEditDistance() {
     auto yG = makeChainGraph(y);
 
     // Compose and viterbi to get distance
-    auto score = viterbiScore(compose(xG, compose(edits, yG)));
+    if (useCuda) {
+      xG = xG.cuda();
+      yG = yG.cuda();
+      edits = edits.cuda();
+    }
+    auto outG = compose(xG, compose(edits, yG));
+    auto score = viterbiScore(outG.cpu());
     return -score.item();
   };
 
   // Small test case
-  auto dist = computeEditDistance(
-      gtn::detail::dataparallel::compose, 5, {0, 1, 0, 1}, {0, 0, 0, 1, 1});
+  auto dist = computeEditDistance(5, {0, 1, 0, 1}, {0, 0, 0, 1, 1}, true);
   CHECK(dist == 2);
 
   // Larger random test cases
@@ -615,18 +560,18 @@ void testComposeEditDistance() {
       y.push_back(rand() % numToks);
     }
 
-    auto dist =
-        computeEditDistance(gtn::detail::dataparallel::compose, numToks, x, y);
-    auto expected = computeEditDistance(compose, numToks, x, y);
+    auto dist = computeEditDistance(numToks, x, y, true);
+    auto expected = computeEditDistance(numToks, x, y, false);
     CHECK(dist == expected);
   }
 }
 
-void testComposeCountNgrams() {
-  auto countNgrams = [](std::function<Graph(Graph, Graph)> compose,
-                        const int numTokens,
+
+TEST_CASE("Test NGrams", "[cuda.ngrams]") {
+  auto countNgrams = [](const int numTokens,
                         const std::vector<int>& input,
-                        const std::vector<int>& ngram) {
+                        const std::vector<int>& ngram,
+                        bool useCuda) {
     // Make n-gram counting graph
     const int n = ngram.size();
     Graph ngramCounter = linearGraph(n, numTokens);
@@ -639,13 +584,18 @@ void testComposeCountNgrams() {
     auto inputG = makeChainGraph(input);
     auto ngramG = makeChainGraph(ngram);
 
-    auto score = forwardScore(compose(inputG, compose(ngramCounter, ngramG)));
+    if (useCuda) {
+      ngramCounter = ngramCounter.cuda();
+      inputG = inputG.cuda();
+      ngramG = ngramG.cuda();
+    }
+    auto outG = compose(inputG, compose(ngramCounter, ngramG));
+    auto score = forwardScore(outG.cpu());
     return round(std::exp(score.item()));
   };
 
   // Small test
-  auto counts =
-      countNgrams(gtn::detail::dataparallel::compose, 2, {0, 1, 0, 1}, {0, 1});
+  auto counts = countNgrams(2, {0, 1, 0, 1}, {0, 1}, true);
   CHECK(counts == 2);
 
   // Larger random test cases
@@ -653,7 +603,7 @@ void testComposeCountNgrams() {
   const int maxLength = 500;
   const int n = 3;
   const int numToks = 5;
-  for (int t = 0; t < 100; t++) {
+  for (int t = 0; t < 10; t++) {
     // Random length in [minLength, maxLength)
     auto inputLen = minLength + rand() % (maxLength - minLength);
 
@@ -667,9 +617,8 @@ void testComposeCountNgrams() {
       ngram.push_back(rand() % numToks);
     }
 
-    auto count =
-        countNgrams(gtn::detail::dataparallel::compose, numToks, input, ngram);
-    auto expected = countNgrams(compose, numToks, input, ngram);
+    auto count = countNgrams(numToks, input, ngram, true);
+    auto expected = countNgrams(numToks, input, ngram, false);
     CHECK(count == expected);
   }
-}*/
+}
