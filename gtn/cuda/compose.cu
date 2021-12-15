@@ -696,19 +696,26 @@ void calcGrad(Graph& g, int* arcIds, const Graph& deltas) {
   grad.clear();
 }
 
-auto boolToIndices(const HDSpan<bool>& vals) {
-
-  thrust::device_ptr<const bool> vPtr(vals.data());
-  auto numTrue = thrust::count(vPtr, vPtr + vals.size(), true);
-  HDSpan<int> ids(numTrue, true, vals.device());
-  if (numTrue > 0) {
-    HDSpan<int> range(vals.size(), true);
-    thrust::device_ptr<int> rPtr(range.data());
-    thrust::sequence(rPtr, rPtr + vals.size());
-    thrust::device_ptr<int> iPtr(ids.data());
-    thrust::copy_if(rPtr, rPtr + vals.size(), vPtr, iPtr, thrust::identity<bool>());
-    range.clear();
+__global__
+void  boolToIndicesKernel(
+    HDSpan<int> ids, const int* counts, const HDSpan<bool> vals, size_t size) {
+  const int gTid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (gTid < size && vals[gTid]) {
+    ids[counts[gTid]] = gTid;
   }
+}
+
+auto boolToIndices(const HDSpan<bool>& vals) {
+  int* counts;
+  int numTrue;
+  std::tie(counts, numTrue) = prefixSumScan(vals.data(), vals.size());
+
+  const int NT = 128;
+  const int gridSize = div_up(vals.size(), NT);
+
+  HDSpan<int> ids(numTrue, true, vals.device());
+  boolToIndicesKernel<<<gridSize, NT, 0, 0>>>(ids, counts, vals, vals.size());
+  CUDA_CHECK(cudaFree(counts));
   return ids;
 }
 
