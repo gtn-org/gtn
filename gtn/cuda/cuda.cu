@@ -43,6 +43,11 @@ void add(const float* a, const float* b, float* out, size_t size, bool isCuda) {
   }
 }
 
+void fill(bool* dst, bool val, size_t size) {
+  thrust::device_ptr<bool> dPtr(dst);
+  thrust::fill(dPtr, dPtr + size, val);
+}
+
 void fill(int* dst, int val, size_t size) {
   thrust::device_ptr<int> dPtr(dst);
   thrust::fill(dPtr, dPtr + size, val);

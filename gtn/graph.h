@@ -72,8 +72,8 @@ class Graph {
 
     detail::HDSpan<int> startIds{isCuda, device};
     detail::HDSpan<int> acceptIds{isCuda, device};
-    detail::HDSpan<int> accept{isCuda, device};
-    detail::HDSpan<int> start{isCuda, device};
+    detail::HDSpan<bool> accept{isCuda, device};
+    detail::HDSpan<bool> start{isCuda, device};
 
     // One value per node - i-th value corresponds to i-th node
     // Last element is the total number of arcs, so that
