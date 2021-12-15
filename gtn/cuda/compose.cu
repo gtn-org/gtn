@@ -94,23 +94,20 @@ void setFalse(HDSpan<bool>& span) {
   cuda::detail::fill(span.data(), false, span.size());
 }
 
-struct BoolPlus {
-  __device__ int operator()(const int& lhs, const int& rhs) {
-    return lhs + rhs;
-  }
-};
-
 std::tuple<int*, int> prefixSumScan(const bool* input, size_t numElts) {
-  std::cout << "HERE " << std::endl;
   const size_t scanNumElts = numElts + 1;
 
   HDSpan<int> output(scanNumElts, 0, true);
   thrust::device_ptr<const bool> iPtr(input);
   thrust::device_ptr<int> oPtr(output.data());
-  thrust::inclusive_scan(iPtr, iPtr + numElts, oPtr + 1, BoolPlus());
+  thrust::exclusive_scan(iPtr, iPtr + numElts, oPtr, (int) 0);
 
-  int sum = 0;
-  CUDA_CHECK(cudaMemcpy((void *)(&sum), (void *)(&(output[scanNumElts-1])), sizeof(int), cudaMemcpyDeviceToHost));
+  int sum;
+  bool lastVal;
+  CUDA_CHECK(cudaMemcpy((void*)(&sum), (void* )(&(output[scanNumElts-2])), sizeof(int), cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy((void*)(&lastVal), (void* )(&(input[scanNumElts-2])), sizeof(bool), cudaMemcpyDeviceToHost));
+  sum += lastVal;
+  CUDA_CHECK(cudaMemcpy((void*)(&(output[scanNumElts-1])),(void*)(&sum), sizeof(int), cudaMemcpyHostToDevice));
 
   return std::make_tuple(output.data(), sum);
 }
@@ -744,7 +741,6 @@ Graph compose(const Graph& first, const Graph& second) {
 
     // Convert bits set in toExplore to indices 
     auto exploreIndices = boolToIndices(toExplore);
-    std::cout << "REACHABLE " << exploreIndices.size() << std::endl;
 
     int* arcCrossProductIndex = calculateArcCrossProductOffset(
         exploreIndices, g1, g2, true);
@@ -836,7 +832,6 @@ Graph compose(const Graph& first, const Graph& second) {
   int totalNodes;
   int* newNodesOffset;
   std::tie(newNodesOffset, totalNodes) = prefixSumScan(newNodes.data(), numAllPairNodes);
-  std::cout << " TOTOAL NODES " << totalNodes << std::endl;
 
   nData.numNodes = totalNodes;
   nData.start.resize(totalNodes);
@@ -867,7 +862,6 @@ Graph compose(const Graph& first, const Graph& second) {
   std::tie(inArcOffsetGPU, totalInArcs) = prefixSumScan(nData.inArcOffset.data(), totalNodes);
 
   std::tie(outArcOffsetGPU, totalOutArcs) = prefixSumScan(nData.outArcOffset.data(), totalNodes);
-  std::cout << " IN " << totalInArcs << " OUT " << totalOutArcs << std::endl;
   assert(totalInArcs == totalOutArcs);
   nData.numArcs = totalOutArcs;
   nData.inArcs.resize(totalOutArcs);
