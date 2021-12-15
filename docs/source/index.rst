@@ -16,6 +16,7 @@ finite-state tranducers (WFSTs).
 
    basic_usage
    common_functions
+   using_cuda
    autograd_basics
    pytorch
 
@@ -25,6 +26,7 @@ finite-state tranducers (WFSTs).
 
    graph
    autograd
+   cuda
    functions
    parallel
    creations

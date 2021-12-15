@@ -8,15 +8,15 @@ using namespace gtn;
 
 TEST_CASE("Test Cuda Utils", "[cuda]") {
     CHECK(cuda::isAvailable());
-    int num_devices = cuda::deviceCount();
-    CHECK(num_devices > 0);
+    int numDevices = cuda::deviceCount();
+    CHECK(numDevices > 0);
 
     int device = cuda::getDevice();
     CHECK(device == 0);
 
-    cuda::setDevice(num_devices - 1);
+    cuda::setDevice(numDevices - 1);
     device = cuda::getDevice();
-    CHECK(device == num_devices - 1);
+    CHECK(device == numDevices - 1);
 }
 
 TEST_CASE("Test Graph CUDA", "[Graph.cuda]") {
@@ -96,17 +96,6 @@ TEST_CASE("Test Graph CUDA", "[Graph.cuda]") {
 
     // Check throws for wrong devices
     CHECK_THROWS(g.addGrad(grad.cpu()));
-  }
-
-  {
-    // Device is inherited from inputs
-    Graph g;
-    g.addNode();
-    g.addNode();
-    g.addArc(0, 1, 0);
-    g = g.cuda();
-    auto ng = Graph(nullptr, {g});
-    CHECK(ng.isCuda());
   }
 }
 

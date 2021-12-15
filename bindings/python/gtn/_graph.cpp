@@ -46,6 +46,10 @@ PYBIND11_MODULE(_graph, m) {
       .def("num_nodes", &Graph::numNodes)
       .def("num_start", &Graph::numStart)
       .def("num_accept", &Graph::numAccept)
+      .def("cpu", &Graph::cpu)
+      .def("cuda", (Graph (Graph::*)() const) &Graph::cuda)
+      .def("cuda", (Graph (Graph::*)(int) const) &Graph::cuda, "device"_a)
+      .def("is_cuda", &Graph::isCuda)
       .def("is_grad_available", &Graph::isGradAvailable)
       .def("item", &Graph::item)
       .def(

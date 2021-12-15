@@ -110,6 +110,7 @@ setup(
     ext_modules=[
         CMakeExtension("gtn._graph"),
         CMakeExtension("gtn._autograd"),
+        CMakeExtension("gtn.cuda"),
         CMakeExtension("gtn._utils"),
         CMakeExtension("gtn._rand"),
         CMakeExtension("gtn._creations"),

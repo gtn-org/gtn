@@ -10,13 +10,31 @@
 namespace gtn {
 namespace cuda {
 
+/** \addtogroup cuda
+ *  @{
+ */
+
+/**
+ * Check if CUDA and a GPU device are available.
+ */
 bool isAvailable();
 
+/**
+ * Returns the number of GPU devices.
+ */
 int deviceCount();
 
+/**
+ * Gets the currently active GPU device.
+ */
 int getDevice();
 
+/**
+ * Sets the active GPU device to `device`.
+ */
 void setDevice(int device);
+
+/** @} */
 
 namespace detail {
 

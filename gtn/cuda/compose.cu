@@ -289,18 +289,15 @@ void findReachableKernel(
     int localIdx = gTid - arcCrossProductOffset[idx];
     assert(localIdx >= 0);
 
-    auto numArcsFirst =
-        g1.inArcOffset[state.first + 1] - g1.inArcOffset[state.first];
-    auto numArcsSecond =
-        g2.inArcOffset[state.second + 1] - g2.inArcOffset[state.second];
-    assert(numArcsFirst > 0 || numArcsSecond > 0);
-
     int firstArcIdx, secondArcIdx;
     if (state.followFirst) {
       firstArcIdx = g1.inArcs[g1.inArcOffset[state.first] + localIdx];
     } else if (state.followSecond) {
       secondArcIdx = g2.inArcs[g2.inArcOffset[state.second] + localIdx];
     } else {
+      auto numArcsFirst =
+          g1.inArcOffset[state.first + 1] - g1.inArcOffset[state.first];
+
       firstArcIdx = g1.inArcs[g1.inArcOffset[state.first] + (localIdx % numArcsFirst)];
       secondArcIdx = g2.inArcs[g2.inArcOffset[state.second] + (localIdx / numArcsFirst)];
     }
