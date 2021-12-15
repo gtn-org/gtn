@@ -284,6 +284,7 @@ class Graph {
   std::vector<int> labelsToVector(bool ilabel = true);
 
   /**
+<<<<<<< HEAD
    * Return a copy of the graph on the given device.
    *
    * The original graph is returned if it is already on the specified device.
@@ -294,6 +295,9 @@ class Graph {
    * Return a copy of the graph on the CPU.
    *
    * The original graph is returned if it is already on the CPU.
+=======
+   * Return a copy of the graph to the CPU.
+>>>>>>> 247a2ba (cuda docs + python bindings + python tests)
    */
   Graph cpu() const;
 
@@ -304,8 +308,11 @@ class Graph {
 
   /**
    * Return a copy of the graph on the GPU specified by `device`.
+<<<<<<< HEAD
    *
    * The original graph is returned if it is already on the specified device.
+=======
+>>>>>>> 247a2ba (cuda docs + python bindings + python tests)
    */
   Graph cuda(const Device& device) const;
 
