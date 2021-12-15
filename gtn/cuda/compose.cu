@@ -218,9 +218,8 @@ void calculateNumArcsAndNodesToExplore(
     int* numOutArcs,
     int* numInArcs) {
   if (reachable[dstIdx]) {
-    // Atomic test and set for newNodes
-    int oldVal = atomicCAS(&(newNodes[dstIdx]), false, true);
-    if (!oldVal) {
+    if (!newNodes[dstIdx]) {
+      newNodes[dstIdx] = true;
       toExplore[dstIdx] = true;
     }
 
@@ -309,40 +308,40 @@ void findReachableKernel(
           g1.numNodes,
           false, false);
 
-      int oldVal = atomicCAS(&(reachable[idx]), false, true);
-      if (!oldVal) {
+      if (!reachable[idx]) {
+        reachable[idx] = true;
         toExplore[idx] = true;
       }
       if (g1.olabels[firstArcIdx] != epsilon) {
-        oldVal = atomicCAS(&(reachable[idx + 1]), false, true);
-        if (!oldVal) {
+        if (!reachable[idx + 1]) {
+          reachable[idx + 1] = true;
           toExplore[idx + 1] = true;
         }
-        oldVal = atomicCAS(&(reachable[idx + 2]), false, true);
-        if (!oldVal) {
+        if (!reachable[idx + 2]) {
+          reachable[idx + 2] = true;
           toExplore[idx + 2] = true;
         }
       }
     } else if (state.followFirst && (g1.olabels[firstArcIdx] == epsilon)) {
       const int idx = stateToIndex(
           g1.srcNodes[firstArcIdx], state.second, g1.numNodes, false, false);
-      int oldVal = atomicCAS(&(reachable[idx]), false, true);
-      if (!oldVal) {
+      if (!reachable[idx]) {
+        reachable[idx] = true;
         toExplore[idx] = true;
       }
-      oldVal = atomicCAS(&(reachable[idx + 1]), false, true);
-      if (!oldVal) {
+      if (!reachable[idx + 1]) {
+        reachable[idx + 1] = true;
         toExplore[idx + 1] = true;
       }
     } else if (state.followSecond && (g2.ilabels[secondArcIdx] == epsilon)) {
       const int idx = stateToIndex(
           state.first, g2.srcNodes[secondArcIdx], g1.numNodes, false, false);
-      int oldVal = atomicCAS(&(reachable[idx]), false, true);
-      if (!oldVal) {
+      if (!reachable[idx]) {
+        reachable[idx] = true;
         toExplore[idx] = true;
       }
-      oldVal = atomicCAS(&(reachable[idx + 2]), false, true);
-      if (!oldVal) {
+      if (!reachable[idx + 2]) {
+        reachable[idx + 2] = true;
         toExplore[idx + 2] = true;
       }
     }
