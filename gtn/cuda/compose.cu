@@ -700,7 +700,6 @@ void calcGrad(Graph& g, int* arcIds, const Graph& deltas) {
   grad.clear();
 }
 
-<<<<<<< HEAD
 __global__
 void  boolToIndicesKernel(
     HDSpan<int> ids, const int* counts, const HDSpan<bool> vals, size_t size) {
@@ -721,21 +720,6 @@ auto boolToIndices(const HDSpan<bool>& vals) {
   HDSpan<int> ids(numTrue, Device::CUDA);
   boolToIndicesKernel<<<gridSize, NT, 0, 0>>>(ids, counts, vals, vals.size());
   CUDA_CHECK(cudaFree(counts));
-=======
-auto boolToIndices(const HDSpan<bool>& vals) {
-
-  thrust::device_ptr<const bool> vPtr(vals.data());
-  auto numTrue = thrust::count(vPtr, vPtr + vals.size(), true);
-  HDSpan<int> ids(numTrue, true, vals.device());
-  if (numTrue > 0) {
-    HDSpan<int> range(vals.size(), true);
-    thrust::device_ptr<int> rPtr(range.data());
-    thrust::sequence(rPtr, rPtr + vals.size());
-    thrust::device_ptr<int> iPtr(ids.data());
-    thrust::copy_if(rPtr, rPtr + vals.size(), vPtr, iPtr, thrust::identity<bool>());
-    range.clear();
-  }
->>>>>>> c3b8c95 (use bool)
   return ids;
 }
 
@@ -758,14 +742,8 @@ Graph compose(const Graph& first, const Graph& second) {
   //////////////////////////////////////////////////////////////////////////
   // Step 1: Data parallel findReachable
   //////////////////////////////////////////////////////////////////////////
-<<<<<<< HEAD
   HDSpan<bool> reachable(numAllPairNodes, false, Device::CUDA);
   HDSpan<bool> toExplore(numAllPairNodes, false, Device::CUDA);
-=======
-  HDSpan<bool> reachable(numAllPairNodes, false, true);
-  HDSpan<bool> toExplore(numAllPairNodes, false, true);
-
->>>>>>> c3b8c95 (use bool)
   findReachableInit(g1, g2, reachable, toExplore); 
 
   // This is the outer control loop that would spawn DP kernels
@@ -808,11 +786,7 @@ Graph compose(const Graph& first, const Graph& second) {
   // in the combined graph
   //////////////////////////////////////////////////////////////////////////
 
-<<<<<<< HEAD
   HDSpan<bool> newNodes(numAllPairNodes, 0.0, Device::CUDA);
-=======
-  HDSpan<bool> newNodes(numAllPairNodes, 0, true);
->>>>>>> c3b8c95 (use bool)
   int* numOutArcs;
   int* numInArcs;
 
