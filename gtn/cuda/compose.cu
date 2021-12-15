@@ -773,7 +773,6 @@ Graph compose(const Graph& first, const Graph& second) {
 
     // Convert bits set in toExplore to indices 
     auto exploreIndices = boolToIndices(toExplore);
-    std::cout << "REACHABLE " << exploreIndices.size() << std::endl;
 
     int* arcCrossProductIndex = calculateArcCrossProductOffset(
         exploreIndices, g1, g2, true);
@@ -869,7 +868,6 @@ Graph compose(const Graph& first, const Graph& second) {
   int totalNodes;
   int* newNodesOffset;
   std::tie(newNodesOffset, totalNodes) = prefixSumScan(newNodes.data(), numAllPairNodes);
-  std::cout << " TOTOAL NODES " << totalNodes << std::endl;
 
   nData.numNodes = totalNodes;
   nData.start.resize(totalNodes);
@@ -900,7 +898,6 @@ Graph compose(const Graph& first, const Graph& second) {
   std::tie(inArcOffsetGPU, totalInArcs) = prefixSumScan(nData.inArcOffset.data(), totalNodes);
 
   std::tie(outArcOffsetGPU, totalOutArcs) = prefixSumScan(nData.outArcOffset.data(), totalNodes);
-  std::cout << " IN " << totalInArcs << " OUT " << totalOutArcs << std::endl;
   assert(totalInArcs == totalOutArcs);
   nData.numArcs = totalOutArcs;
   nData.inArcs.resize(totalOutArcs);
