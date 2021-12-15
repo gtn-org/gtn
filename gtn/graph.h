@@ -78,10 +78,17 @@ class Graph {
     size_t numNodes{0};
     size_t numArcs{0};
 
+<<<<<<< HEAD
     detail::HDSpan<int> startIds{device};
     detail::HDSpan<int> acceptIds{device};
     detail::HDSpan<bool> accept{device};
     detail::HDSpan<bool> start{device};
+=======
+    detail::HDSpan<int> startIds{isCuda, device};
+    detail::HDSpan<int> acceptIds{isCuda, device};
+    detail::HDSpan<bool> accept{isCuda, device};
+    detail::HDSpan<bool> start{isCuda, device};
+>>>>>>> c3b8c95 (use bool)
 
     // One value per node - i-th value corresponds to i-th node
     // Last element is the total number of arcs, so that
@@ -284,7 +291,6 @@ class Graph {
   std::vector<int> labelsToVector(bool ilabel = true);
 
   /**
-<<<<<<< HEAD
    * Return a copy of the graph on the given device.
    *
    * The original graph is returned if it is already on the specified device.
@@ -295,9 +301,6 @@ class Graph {
    * Return a copy of the graph on the CPU.
    *
    * The original graph is returned if it is already on the CPU.
-=======
-   * Return a copy of the graph to the CPU.
->>>>>>> 247a2ba (cuda docs + python bindings + python tests)
    */
   Graph cpu() const;
 
@@ -308,11 +311,6 @@ class Graph {
 
   /**
    * Return a copy of the graph on the GPU specified by `device`.
-<<<<<<< HEAD
-   *
-   * The original graph is returned if it is already on the specified device.
-=======
->>>>>>> 247a2ba (cuda docs + python bindings + python tests)
    */
   Graph cuda(const Device& device) const;
 
