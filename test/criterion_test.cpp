@@ -14,6 +14,7 @@
 #include "gtn/gtn.h"
 
 using namespace gtn;
+using gtn::criterion::ctcLoss;
 
 Graph emissions_graph(
     std::vector<float> emissions_vec,
@@ -32,34 +33,13 @@ Graph emissions_graph(
   return g;
 }
 
-Graph ctc_graph(std::vector<int> target, int blank) {
-  size_t L = target.size();
-  size_t U = 2 * L + 1;
-  Graph ctc;
-  for (int l = 0; l < U; l++) {
-    int idx = (l - 1) / 2;
-    ctc.addNode(l == 0, l == U - 1 || l == U - 2);
-    int label = l % 2 ? target[idx] : blank;
-    ctc.addArc(l, l, label);
-    if (l > 0) {
-      ctc.addArc(l - 1, l, label);
-    }
-    if (l % 2 && l > 1 && label != target[idx - 1]) {
-      ctc.addArc(l - 2, l, label);
-    }
-  }
-  return ctc;
-}
-
-TEST_CASE("test ctc", "[criterion]") {
+TEST_CASE("Test CTC", "[criterion.ctc]") {
   // These test cases are taken from wav2letter: https://fburl.com/msom2e4v
   {
     // Test case 1
-    Graph ctc = ctc_graph({0, 0}, 1);
-
     Graph emissions = emissions_graph({1.0, 0.0, 0.0, 1.0, 1.0, 0.0}, 3, 2);
 
-    auto loss = forwardScore(compose(ctc, emissions));
+    auto loss = ctcLoss(emissions, {0, 0}, 1);
     CHECK(loss.item() == 0.0);
 
     // Should be 0 since scores are normalized
@@ -70,14 +50,12 @@ TEST_CASE("test ctc", "[criterion]") {
   {
     // Test case 2
     int T = 3, N = 4;
-    Graph ctc = ctc_graph({1, 2}, N - 1);
-    Graph emissions = emissions_graph(std::vector<float>(T * N, 1.0), T, N);
+    Graph emissions = emissions_graph(std::vector<float>(T * N, 0.25), T, N);
 
-    auto expected_loss = -std::log(0.25 * 0.25 * 0.25 * 5);
+    float expected_loss = -std::log(0.25 * 0.25 * 0.25 * 5);
 
-    auto loss = subtract(
-        forwardScore(compose(ctc, emissions)), forwardScore(emissions));
-    CHECK(-loss.item() == Approx(expected_loss));
+    auto loss = ctcLoss(emissions, {1, 2}, N - 1);
+    CHECK(loss.item() == Approx(expected_loss));
   }
 
   // This test case is  taken from Tensor Flow CTC implementation
@@ -88,7 +66,6 @@ TEST_CASE("test ctc", "[criterion]") {
     std::vector<int> target = {0, 1, 2, 1, 0};
 
     // generate CTC graph
-    Graph ctc = ctc_graph(target, N - 1);
     std::vector<float> emissions_vec = {
         0.633766,  0.221185, 0.0917319, 0.0129757,  0.0142857,  0.0260553,
         0.111121,  0.588392, 0.278779,  0.0055756,  0.00569609, 0.010436,
@@ -104,7 +81,7 @@ TEST_CASE("test ctc", "[criterion]") {
     auto z = forwardScore(emissions);
     CHECK(std::abs(z.item()) < 1e-5);
 
-    auto loss = subtract(z, forwardScore(compose(ctc, emissions)));
+    auto loss = ctcLoss(emissions, target, N - 1);
     float expected_loss = 3.34211;
     CHECK(loss.item() == Approx(expected_loss));
 
@@ -120,10 +97,28 @@ TEST_CASE("test ctc", "[criterion]") {
 
     bool allClose = true;
     auto grad = emissions.grad();
-    for (int i = 0; i < T * N; i++) {
-      auto g = grad.weight(i);
-      allClose &= (std::abs(expected_grad[i] - g) < 1e-5);
+
+    // Note: expected grad from TF is w.r.t to unnormalized inputs while
+    // gtn::criterion::ctcLoss takes logProbs as input
+    for (int i = 0; i < T; i++) {
+      float expSum = 0;
+      for (int j = 0; j < N; j++) {
+        auto idx = i * N + j;
+        expSum += emissions_vec[idx];
+      }
+      for (int j = 0; j < N; j++) {
+        float g = 0;
+        auto mainIdx = i * N + j;
+        for (int k = 0; k < N; k++) {
+          auto idx = i * N + k;
+          // chain rule
+          float offset = (j == k) ? 1 : 0;
+          g += grad.weight(idx) * (offset - emissions_vec[mainIdx] / expSum);
+        }
+        allClose &= (std::abs(expected_grad[mainIdx] - g) < 1e-5);
+      }
     }
+
     CHECK(allClose);
   }
 
@@ -133,9 +128,6 @@ TEST_CASE("test ctc", "[criterion]") {
     // Test case 4
     const int T = 5, N = 6;
     std::vector<int> target = {0, 1, 1, 0};
-
-    // generate CTC graph
-    Graph ctc = ctc_graph(target, N - 1);
 
     std::vector<float> emissions_vec = {
         0.30176,  0.28562,  0.0831517, 0.0862751, 0.0816851, 0.161508,
@@ -152,7 +144,7 @@ TEST_CASE("test ctc", "[criterion]") {
     auto z = forwardScore(emissions);
     CHECK(std::abs(z.item()) < 1e-5);
 
-    auto loss = subtract(z, forwardScore(compose(ctc, emissions)));
+    auto loss = ctcLoss(emissions, target, N - 1);
     float expected_loss = 5.42262;
     CHECK(loss.item() == Approx(expected_loss));
 
@@ -169,9 +161,26 @@ TEST_CASE("test ctc", "[criterion]") {
 
     bool allClose = true;
     auto grad = emissions.grad();
-    for (int i = 0; i < T * N; i++) {
-      auto g = grad.weight(i);
-      allClose &= (std::abs(expected_grad[i] - g) < 1e-5);
+
+    // Note: expected grad from TF is w.r.t to unnormalized inputs while
+    // gtn::criterion::ctcLoss takes logProbs as input
+    for (int i = 0; i < T; i++) {
+      float expSum = 0;
+      for (int j = 0; j < N; j++) {
+        auto idx = i * N + j;
+        expSum += emissions_vec[idx];
+      }
+      for (int j = 0; j < N; j++) {
+        float g = 0;
+        auto mainIdx = i * N + j;
+        for (int k = 0; k < N; k++) {
+          auto idx = i * N + k;
+          // chain rule
+          float offset = (j == k) ? 1 : 0;
+          g += grad.weight(idx) * (offset - emissions_vec[mainIdx] / expSum);
+        }
+        allClose &= (std::abs(expected_grad[mainIdx] - g) < 1e-5);
+      }
     }
     CHECK(allClose);
   }

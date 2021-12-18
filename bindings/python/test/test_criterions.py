@@ -8,6 +8,7 @@ LICENSE file in the root directory of this source tree.
 import math
 import unittest
 import gtn
+import gtn.criterion
 
 
 def emissions_graph(emissions_vec, T, N, logprobs=False):
@@ -18,33 +19,15 @@ def emissions_graph(emissions_vec, T, N, logprobs=False):
     return g
 
 
-def ctc_graph(target, blank):
-    L = len(target)
-    U = 2 * L + 1
-    ctc = gtn.Graph()
-    for l in range(U):
-        idx = (l - 1) // 2
-        ctc.add_node(l == 0, l == U - 1 or l == U - 2)
-        label = target[idx] if l % 2 else blank
-        ctc.add_arc(l, l, label)
-        if l > 0:
-            ctc.add_arc(l - 1, l, label)
-        if l % 2 and l > 1 and label != target[idx - 1]:
-            ctc.add_arc(l - 2, l, label)
-
-    return ctc
-
-
 class CriterionsTestCase(unittest.TestCase):
     def test_ctc_criterion(self):
         # These test cases are taken from wav2letter: https:#fburl.com/msom2e4v
 
         # Test case 1
-        ctc = ctc_graph([0, 0], 1)
 
         emissions = emissions_graph([1.0, 0.0, 0.0, 1.0, 1.0, 0.0], 3, 2)
 
-        loss = gtn.forward_score(gtn.compose(ctc, emissions))
+        loss = gtn.criterion.ctc_loss(emissions, [0, 0], 1)
         self.assertEqual(loss.item(), 0.0)
 
         # Should be 0 since scores are normalized
@@ -54,14 +37,11 @@ class CriterionsTestCase(unittest.TestCase):
         # Test case 2
         T = 3
         N = 4
-        ctc = ctc_graph([1, 2], N - 1)
-        emissions = emissions_graph([1.0] * (T * N), T, N)
+        emissions = emissions_graph([0.25] * (T * N), T, N)
 
-        expected_loss = -math.log(0.25 * 0.25 * 0.25 * 5)
+        expected_loss = math.log(0.25 * 0.25 * 0.25 * 5)
 
-        loss = gtn.subtract(
-            gtn.forward_score(gtn.compose(ctc, emissions)), gtn.forward_score(emissions)
-        )
+        loss = gtn.criterion.ctc_loss(emissions, [1, 2], N - 1)
         self.assertAlmostEqual(-loss.item(), expected_loss)
 
         # Test case 3
@@ -70,7 +50,6 @@ class CriterionsTestCase(unittest.TestCase):
         target = [0, 1, 2, 1, 0]
 
         # generate CTC graph
-        ctc = ctc_graph(target, N - 1)
 
         # fmt: off
         emissions_vec = [
@@ -89,7 +68,7 @@ class CriterionsTestCase(unittest.TestCase):
         z = gtn.forward_score(emissions)
         self.assertTrue(abs(z.item()) < 1e-5)
 
-        loss = gtn.subtract(z, gtn.forward_score(gtn.compose(ctc, emissions)))
+        loss = gtn.criterion.ctc_loss(emissions, target, N - 1)
         expected_loss = 3.34211
         self.assertAlmostEqual(loss.item(), expected_loss, places=5)
 
@@ -108,10 +87,20 @@ class CriterionsTestCase(unittest.TestCase):
         all_close = True
         grad = emissions.grad()
         grad_weights = grad.weights_to_list()
-        for i in range(T * N):
-            g = grad_weights[i]
-            all_close = all_close and (abs(expected_grad[i] - g) < 1e-5)
-
+        # Note: expected grad from TF is w.r.t to unnormalized inputs while
+        # gtn::criterion::ctcLoss takes logProbs as input
+        for i in range(T):
+            off = i * N
+            exp_sum = sum(emissions_vec[off : off + N])
+            for j in range(N):
+                g = sum(
+                    [
+                        grad_weights[off + k]
+                        * (int(j == k) - emissions_vec[off + j] / exp_sum)
+                        for k in range(N)
+                    ]
+                )
+                all_close = all_close and (abs(expected_grad[off + j] - g) < 1e-5)
         self.assertTrue(all_close)
 
         # Test case 4
@@ -121,8 +110,6 @@ class CriterionsTestCase(unittest.TestCase):
         N = 6
         target = [0, 1, 1, 0]
 
-        # generate CTC graph
-        ctc = ctc_graph(target, N - 1)
         # fmt: off
         emissions_vec = [
             0.30176,  0.28562,  0.0831517, 0.0862751, 0.0816851, 0.161508,
@@ -140,7 +127,7 @@ class CriterionsTestCase(unittest.TestCase):
         z = gtn.forward_score(emissions)
         self.assertTrue(abs(z.item()) < 1e-5)
 
-        loss = gtn.subtract(z, gtn.forward_score(gtn.compose(ctc, emissions)))
+        loss = gtn.criterion.ctc_loss(emissions, target, N - 1)
         expected_loss = 5.42262
         self.assertAlmostEqual(loss.item(), expected_loss, places=4)
 
@@ -159,9 +146,21 @@ class CriterionsTestCase(unittest.TestCase):
         all_close = True
         grad = emissions.grad()
         grad_weights = grad.weights_to_list()
-        for i in range(T * N):
-            g = grad_weights[i]
-            all_close = all_close and (abs(expected_grad[i] - g) < 1e-5)
+
+        # Note: expected grad from TF is w.r.t to unnormalized inputs while
+        # gtn::criterion::ctcLoss takes logProbs as input
+        for i in range(T):
+            off = i * N
+            exp_sum = sum(emissions_vec[off : off + N])
+            for j in range(N):
+                g = sum(
+                    [
+                        grad_weights[off + k]
+                        * (int(j == k) - emissions_vec[off + j] / exp_sum)
+                        for k in range(N)
+                    ]
+                )
+                all_close = all_close and (abs(expected_grad[off + j] - g) < 1e-5)
         self.assertTrue(all_close)
 
     def test_asg_criterion(self):

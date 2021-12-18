@@ -31,6 +31,7 @@ finite-state tranducers (WFSTs).
    parallel
    creations
    utils
+   criterions
 
 .. toctree::
    :caption: Python API Reference

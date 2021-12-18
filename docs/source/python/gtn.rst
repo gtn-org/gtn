@@ -267,3 +267,13 @@ Input and Output
   Use the :data:`epsilon` constant to refer to :math:`\epsilon`
   transitions.
 
+Criterions
+----------
+
+.. py:function:: ctc_loss(log_prob, target, blank_idx)
+
+  An implementation of Connectionist Temporal Classification (CTC) loss in GTN framework.
+
+  :param Graph log_prob: emission graph with weights as log probabilities
+  :param list target: target sequence
+  :param int blank_idx: index of blank token

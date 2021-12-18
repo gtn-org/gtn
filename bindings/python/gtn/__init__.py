@@ -15,9 +15,9 @@ from ._graph import __version__
 from ._device import *
 from ._functions import *
 from ._autograd import *
+from ._creations import *
 from ._utils import *
 from ._rand import *
-from ._creations import *
 from ._parallel import *
 from ._experimental import *
 from . import cuda
