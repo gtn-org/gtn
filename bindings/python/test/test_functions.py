@@ -552,7 +552,7 @@ class FunctionsTestCase(unittest.TestCase):
         expected.add_arc(0, 0, 0, gtn.epsilon, 1.0)
         expected.add_arc(0, 1, 1, 3)
 
-        self.assertTrue(gtn.equal(gtn.compose(g1, g2), expected))
+        self.assertTrue(gtn.rand_equivalent(gtn.compose(g1, g2), expected, 20))
 
         # Simple test case for input epsilon on second graph
         g1 = gtn.Graph()
@@ -572,7 +572,7 @@ class FunctionsTestCase(unittest.TestCase):
         expected.add_arc(0, 1, 1, 3)
         expected.add_arc(1, 1, gtn.epsilon, 0, 2.0)
 
-        self.assertTrue(gtn.equal(gtn.compose(g1, g2), expected))
+        self.assertTrue(gtn.rand_equivalent(gtn.compose(g1, g2), expected, 20))
 
         # This test case is taken from "Weighted Automata Algorithms", Mehryar
         # Mohri, https://cs.nyu.edu/~mohri/pub/hwa.pdf Section 5.1, Figure 7

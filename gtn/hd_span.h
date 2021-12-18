@@ -2,6 +2,12 @@
 
 #include "gtn/cuda/cuda.h"
 
+#if defined(CUDA)
+#define HDTAG __host__ __device__
+#else
+#define HDTAG
+#endif
+
 namespace gtn {
 namespace detail {
 
@@ -56,11 +62,13 @@ class HDSpan {
   explicit HDSpan(bool isCuda, int device = 0)
     : isCuda_(isCuda), device_(device) {};
 
-  __host__ __device__ const T operator[](size_t idx) const {
+  HDTAG
+  const T operator[](size_t idx) const {
     return data_[idx];
   };
 
-  __host__ __device__ T& operator[](size_t idx) {
+  HDTAG
+  T& operator[](size_t idx) {
     return data_[idx];
   };
 
@@ -113,15 +121,18 @@ class HDSpan {
     return data() + size();
   };
 
-  __host__ __device__ const T* data() const {
+  HDTAG
+  const T* data() const {
     return data_;
   };
 
-  __host__ __device__ T* data() {
+  HDTAG
+  T* data() {
     return data_;
   };
 
-  __host__ __device__ size_t size() const {
+  HDTAG
+  size_t size() const {
     return size_;
   };
 

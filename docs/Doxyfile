@@ -16,7 +16,6 @@ GENERATE_HTML          = NO
 GENERATE_LATEX         = NO
 GENERATE_XML           = YES
 XML_PROGRAMLISTING     = YES
-#EXCLUDE_SYMBOLS        = gtn::detail*
 
 ################################################################################
 # Doxygen preprocessor / parser control.                                       #

@@ -96,6 +96,12 @@ TEST_CASE("Test HDSpan", "[HDSpan]") {
     CHECK(h[0] == 0.5);
     CHECK(h[1] == 0.5);
   }
+
+  {
+    HDSpan<bool> h(2, false, false);
+    CHECK(h[0] == 0.5);
+    CHECK(h[1] == 0.5);
+  }
 }
 
 TEST_CASE("Test HDSpan CUDA", "[HDSpan.cuda]") {

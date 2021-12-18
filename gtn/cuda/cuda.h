@@ -10,13 +10,31 @@
 namespace gtn {
 namespace cuda {
 
+/** \addtogroup cuda
+ *  @{
+ */
+
+/**
+ * Check if CUDA and a GPU device are available.
+ */
 bool isAvailable();
 
+/**
+ * Returns the number of GPU devices.
+ */
 int deviceCount();
 
+/**
+ * Gets the currently active GPU device.
+ */
 int getDevice();
 
+/**
+ * Sets the active GPU device to `device`.
+ */
 void setDevice(int device);
+
+/** @} */
 
 namespace detail {
 
@@ -35,8 +53,9 @@ class DeviceManager {
 };
 
 void add(const float* a, const float* b, float* out, size_t size, bool isCuda);
-void fill(float* dst, float val, size_t size);
+void fill(bool* dst, bool val, size_t size);
 void fill(int* dst, int val, size_t size);
+void fill(float* dst, float val, size_t size);
 
 void copy(void* dst, const void* src, size_t size);
 void* allocate(size_t size, int device);

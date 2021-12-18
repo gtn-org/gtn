@@ -150,9 +150,13 @@ float Graph::item() const {
     throw std::invalid_argument(
       "[Graph::item] Can only get scalar from CPU graphs");
   }
-  if (numArcs() != 1) {
+  if (numArcs() > 1) {
     throw std::invalid_argument(
         "[Graph::item] Cannot convert Graph with more than 1 arc to a scalar.");
+  }
+  if (numArcs() == 0) {
+    throw std::invalid_argument(
+        "[Graph::item] Cannot convert Graph with no arcs to a scalar.");
   }
   return weight(0);
 }

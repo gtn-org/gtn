@@ -72,8 +72,8 @@ class Graph {
 
     detail::HDSpan<int> startIds{isCuda, device};
     detail::HDSpan<int> acceptIds{isCuda, device};
-    detail::HDSpan<int> accept{isCuda, device};
-    detail::HDSpan<int> start{isCuda, device};
+    detail::HDSpan<bool> accept{isCuda, device};
+    detail::HDSpan<bool> start{isCuda, device};
 
     // One value per node - i-th value corresponds to i-th node
     // Last element is the total number of arcs, so that
@@ -188,6 +188,16 @@ class Graph {
    * autograd tape see `gtn::clone`.
    */
   static Graph deepCopy(const Graph& src);
+
+  /**
+   * A deep copy of a graph `src` which is not recorded in the
+   * autograd tape. For a version which is recorded in the
+   * autograd tape see `gtn::clone`.
+   *
+   * @param src The source graph to copy from.
+   * @param isCuda Whether or not to place the copy on the GPU
+   * @param device The GPU device id if the copy is on the GPU
+   */
   static Graph deepCopy(const Graph& src, bool isCuda, int device = 0);
 
   /**
@@ -258,17 +268,17 @@ class Graph {
   std::vector<int> labelsToVector(bool ilabel = true);
 
   /**
-   * Move the graph to the CPU.
+   * Return a copy of the graph to the CPU.
    */
   Graph cpu() const;
 
   /**
-   * Move the graph to currently active GPU.
+   * Return a copy of the graph on the currently active GPU.
    */
   Graph cuda() const;
 
   /**
-   * Move the graph to GPU specified by `device`.
+   * Return a copy of the graph on the GPU specified by `device`.
    */
   Graph cuda(int device) const;
 
@@ -293,7 +303,7 @@ class Graph {
     return sharedGraph_->isCuda;
   }
 
-  /*
+  /**
    * Get the GPU device the graph is on.
    */
   int device() const {
