@@ -41,6 +41,19 @@ float* ones(size_t size, int device) {
   throw std::logic_error("[cuda::ones] CUDA not available.");
 }
 
+void fill(bool* dst, bool val, size_t size) {
+  throw std::logic_error("[cuda::fill] CUDA not available.");
+}
+
+void fill(int* dst, int val, size_t size) {
+  throw std::logic_error("[cuda::fill] CUDA not available.");
+}
+
+void fill(float* dst, float val, size_t size) {
+  throw std::logic_error("[cuda::fill] CUDA not available.");
+}
+
+
 void copy(void* dst, const void* src, size_t size) {
   std::memcpy(dst, src, size);
 }

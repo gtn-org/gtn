@@ -22,7 +22,7 @@ TEST_CASE("Test Cuda Utils", "[cuda]") {
     CHECK(b[0] == 1);
     CHECK(b[1] == 1);
     CHECK(b[2] == 1);
-    CHECK_THROWS(cuda::detail::ones(5, 0));
+    CHECK_THROWS(cuda::detail::fill(nullptr, 0, 0));
     cuda::detail::copy(a.data(), b.data(), sizeof(float) * 3);
     CHECK(a[0] == 1);
     CHECK(a[1] == 1);
