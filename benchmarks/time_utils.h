@@ -42,18 +42,6 @@ double timeit(std::function<void()> fn) {
   return milliseconds(end - start) / static_cast<double>(numIters);
 }
 
-Graph makeLinear(int M, int N) {
-  Graph linear;
-  linear.addNode(true);
-  for (int m = 1; m <= M; m++) {
-    linear.addNode(false, m == M);
-    for (int n = 0; n < N; n++) {
-      linear.addArc(m - 1, m, n);
-    }
-  }
-  return linear;
-}
-
 // *NB* num_arcs is assumed to be greater than num_nodes.
 Graph makeRandomDAG(int num_nodes, int num_arcs) {
   Graph graph;

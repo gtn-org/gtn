@@ -22,7 +22,6 @@ Graph linearGraph(int M, int N, bool calcGrad /* = true */) {
   g.addNode(true);
   for (int m = 1; m <= M; ++m) {
     g.addNode(false, m == M);
-    auto inOffset = (m - 1) * N;
     for (int n = 0; n < N; ++n) {
       g.addArc(m - 1, m, n);
     }

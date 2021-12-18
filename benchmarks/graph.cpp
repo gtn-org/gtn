@@ -16,7 +16,7 @@ void timeConstructDestruct() {
   // Hold the reference to the graphs so we don't time destruction.
   std::vector<Graph> graphs;
   auto linearConstruction = [&graphs]() {
-    graphs.push_back(makeLinear(1000, 1000));
+    graphs.push_back(linearGraph(1000, 1000));
   };
   TIME(linearConstruction);
 
@@ -25,13 +25,13 @@ void timeConstructDestruct() {
 }
 
 void timeCopy() {
-  auto graph = makeLinear(1000, 1000);
+  auto graph = linearGraph(1000, 1000);
   auto copy = [&graph]() { auto copied = Graph::deepCopy(graph); };
   TIME(copy);
 }
 
 void timeTraversal() {
-  auto graph = makeLinear(100000, 100);
+  auto graph = linearGraph(100000, 100);
 
   // A simple iterative function to visit every node in a graph.
   auto traverseForward = [&graph]() {
