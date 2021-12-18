@@ -54,7 +54,8 @@ bool equal(const Graph& g1, const Graph& g2) {
       return false;
     }
 
-    auto bOut = g2.out(n);
+
+    auto bOut = std::list<int>(g2.out(n).begin(), g2.out(n).end());
     for (auto arcG1 : g1.out(n)) {
       auto it = bOut.begin();
       for (; it != bOut.end(); it++) {
@@ -98,7 +99,7 @@ bool isomorphic(
   }
 
   // Each arc in a has to match with an arc in b
-  auto bOut = g2.out(g2Node);
+  auto bOut = std::list<int>(g2.out(g2Node).begin(), g2.out(g2Node).end());
   for (auto aArc : g1.out(g1Node)) {
     auto it = bOut.begin();
     for (; it != bOut.end(); it++) {

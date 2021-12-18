@@ -58,6 +58,15 @@ constexpr int epsilon{-1};
 class Graph {
 
  public:
+  struct ArcPtr {
+    int* ptr_;
+    int n_;
+    int operator[](const int idx) const { return ptr_[idx]; };
+    const int* begin() const { return ptr_; };
+    const int* end() const { return ptr_ + n_; };
+    size_t size() const { return n_; };
+  };
+
   struct SharedGraph {
     SharedGraph(bool isCuda = false, int device = 0) :
       isCuda(isCuda), device(device) { }
@@ -434,13 +443,11 @@ class Graph {
     return sharedGraph_->outArcOffset[i+1] - sharedGraph_->outArcOffset[i];
   }
   /** Get the indices of outgoing arcs from the `i`-th node. */
-  std::vector<int> out(size_t i) const {
+  ArcPtr out(size_t i) const {
     maybeCompile();
     auto start = sharedGraph_->outArcOffset[i];
     auto end = sharedGraph_->outArcOffset[i + 1];
-    return std::vector<int>(
-        sharedGraph_->outArcs.begin() + start,
-        sharedGraph_->outArcs.begin() + end);
+    return ArcPtr{sharedGraph_->outArcs.begin() + start, end - start};
   }
   /** Get the index of the `j`-th outgoing arc from the `i`-th node. */
   int out(size_t i, size_t j) const {
@@ -453,14 +460,11 @@ class Graph {
     return sharedGraph_->inArcOffset[i+1] - sharedGraph_->inArcOffset[i];
   }
   /** Get the indices of incoming arcs to the `i`-th node. */
-  // TODO, this could be faster as an iterator
-  std::vector<int> in(size_t i) const {
+  ArcPtr in(size_t i) const {
     maybeCompile();
     auto start = sharedGraph_->inArcOffset[i];
     auto end = sharedGraph_->inArcOffset[i + 1];
-    return std::vector<int>(
-        sharedGraph_->inArcs.begin() + start,
-        sharedGraph_->inArcs.begin() + end);
+    return ArcPtr{sharedGraph_->inArcs.begin() + start, end - start};
   }
   /** Get the index of the `j`-th incoming arc to the `i`-th node. */
   size_t in(size_t i, size_t j) const {

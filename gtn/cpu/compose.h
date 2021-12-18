@@ -37,11 +37,11 @@ class UnsortedMatcher : public ArcMatcher {
  private:
   const Graph& g1_;
   const Graph& g2_;
-  std::vector<int> lv_;
-  std::vector<int> rv_;
-  std::vector<int>::const_iterator lIt_;
-  std::vector<int>::const_iterator rItBegin_;
-  std::vector<int>::const_iterator rIt_;
+  Graph::ArcPtr lv_;
+  Graph::ArcPtr  rv_;
+  const int* lIt_;
+  const int* rItBegin_;
+  const int* rIt_;
 };
 
 class SinglySortedMatcher : public ArcMatcher {
@@ -58,10 +58,10 @@ class SinglySortedMatcher : public ArcMatcher {
   const Graph& g1_;
   const Graph& g2_;
   bool searchG1_;
-  std::vector<int> searchV_;
-  std::vector<int> queryV_;
-  std::vector<int>::const_iterator searchIt_;
-  std::vector<int>::const_iterator queryIt_;
+  Graph::ArcPtr searchV_;
+  Graph::ArcPtr queryV_;
+  const int* searchIt_;
+  const int* queryIt_;
 };
 
 class DoublySortedMatcher : public ArcMatcher {
@@ -78,11 +78,11 @@ class DoublySortedMatcher : public ArcMatcher {
   const Graph& g1_;
   const Graph& g2_;
   bool searchG1_;
-  std::vector<int> searchV_;
-  std::vector<int> queryV_;
-  std::vector<int>::iterator searchIt_;
-  std::vector<int>::iterator searchItBegin_;
-  std::vector<int>::iterator queryIt_;
+  Graph::ArcPtr searchV_;
+  Graph::ArcPtr queryV_;
+  const int* searchIt_;
+  const int* searchItBegin_;
+  const int* queryIt_;
 };
 
 /* Composes two transducers. */

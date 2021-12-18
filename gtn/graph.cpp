@@ -251,7 +251,9 @@ Graph Graph::deepCopy(const Graph& src) {
 }
 
 Graph Graph::deepCopy(const Graph& src, bool isCuda  = false, int device /* = 0 */) {
-  src.maybeCompile();
+  if (isCuda) {
+    src.maybeCompile();
+  }
   Graph out(src.calcGrad());
   out.sharedGraph_ = makeSharedGraph(isCuda, device);
   out.sharedGraph_->numNodes = src.numNodes();
