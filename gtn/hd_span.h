@@ -48,12 +48,7 @@ class HDSpan {
   explicit HDSpan() {};
   explicit HDSpan(int size, T val, bool isCuda = false, int device = 0)
       : isCuda_(isCuda), device_(device) {
-    resize(size);
-    if (isCuda) {
-      gtn::cuda::detail::fill(data(), val, size);
-    } else {
-      std::fill(data(), data() + size, val);
-    }
+    resize(size, val);
   };
   explicit HDSpan(int size, bool isCuda = false, int device = 0)
     : isCuda_(isCuda), device_(device) {
@@ -90,6 +85,19 @@ class HDSpan {
     data_ = newData;
   };
 
+  void resize(size_t size, T val) {
+    // Smaller or same size is a no-op with space_ unchanged.
+    auto os = size_;
+    resize(size);
+    if (size > os) {
+      if (isCuda()) {
+        gtn::cuda::detail::fill(data() + os, val, size - os);
+      } else {
+        std::fill(data() + os, data() + size, val);
+      }
+    }
+  };
+
   void resize(size_t size) {
     // Smaller or same size is a no-op with space_ unchanged.
     if (size <= size_) {
@@ -120,6 +128,13 @@ class HDSpan {
   T* end() {
     return data() + size();
   };
+
+  T back() const {
+    return data()[size() - 1];
+  }
+  T& back() {
+    return data()[size() - 1];
+  }
 
   HDTAG
   const T* data() const {

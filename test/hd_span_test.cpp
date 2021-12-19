@@ -59,6 +59,24 @@ TEST_CASE("Test HDSpan", "[HDSpan]") {
     CHECK(sCopy[2] == 3);
   }
 
+  // Check resizing works
+  {
+    HDSpan<int> s(2, 1);
+    CHECK(s[0] == 1);
+    CHECK(s[1] == 1);
+
+    s.resize(4, 2);
+    CHECK(s[0] == 1);
+    CHECK(s[1] == 1);
+    CHECK(s[2] == 2);
+    CHECK(s[3] == 2);
+
+    s.resize(3, 3);
+    CHECK(s[0] == 1);
+    CHECK(s[1] == 1);
+    CHECK(s[2] == 2);
+  }
+
   {
     allocations = 0;
     deallocations = 0;
@@ -99,8 +117,8 @@ TEST_CASE("Test HDSpan", "[HDSpan]") {
 
   {
     HDSpan<bool> h(2, false, false);
-    CHECK(h[0] == 0.5);
-    CHECK(h[1] == 0.5);
+    CHECK(h[0] == false);
+    CHECK(h[1] == false);
   }
 }
 
