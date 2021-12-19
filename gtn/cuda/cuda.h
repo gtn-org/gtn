@@ -54,12 +54,13 @@ class DeviceManager {
 
 void add(const float* a, const float* b, float* out, size_t size, bool isCuda);
 
-template <typename T>
-void fill(T* dst, T val, size_t size);
-
 void copy(void* dst, const void* src, size_t size);
 void* allocate(size_t size, int device);
 void free(void* ptr);
+
+void fill(float* dst, float val, size_t size);
+void fill(int* dst, int val, size_t size);
+void fill(bool* dst, bool val, size_t size);
 
 #if defined(CUDA)
 void cudaCheck(cudaError_t err, const char* file, int line);
@@ -69,9 +70,3 @@ void cudaCheck(cudaError_t err, const char* file, int line);
 
 } // namespace cuda
 } // namespace gtn
-
-#if defined(CUDA)
-#include "cuda.cuh"
-#else
-#include "nocuda.h"
-#endif

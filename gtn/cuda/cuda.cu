@@ -64,6 +64,21 @@ void cudaCheck(cudaError_t err, const char* file, int line) {
   }
 }
 
+void fill(float* dst, float val, size_t size) {
+  thrust::device_ptr<float> ptr(dst);
+  thrust::fill(ptr, ptr + size, val);
+}
+
+void fill(int* dst, int val, size_t size) {
+  thrust::device_ptr<int> ptr(dst);
+  thrust::fill(ptr, ptr + size, val);
+}
+
+void fill(bool* dst, bool val, size_t size) {
+  thrust::device_ptr<bool> ptr(dst);
+  thrust::fill(ptr, ptr + size, val);
+}
+
 } // namespace detail
 } // namespace cuda
 } // namespace gtn

@@ -53,6 +53,19 @@ void free(void* ptr) {
   throw std::logic_error("[cuda::free] CUDA not available.");
 }
 
+void fill(float* dst, float val, size_t size) {
+  throw std::logic_error("[cuda::fill] CUDA not available.");
+}
+
+void fill(int* dst, int val, size_t size) {
+  throw std::logic_error("[cuda::fill] CUDA not available.");
+}
+
+void fill(bool* dst, bool val, size_t size) {
+  throw std::logic_error("[cuda::fill] CUDA not available.");
+}
+
+
 } // namespace detail
 
 Graph negate(const Graph& g) {
