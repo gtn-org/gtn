@@ -69,17 +69,14 @@ Graph clone(const Graph& g, Projection projection /* = Projection::NONE */) {
   auto gradFunc = [](std::vector<Graph>& inputs, Graph& deltas) {
     inputs[0].addGrad(deltas);
   };
-  Graph out(gradFunc, {g.withoutWeights()});
-  for (auto n = 0; n < g.numNodes(); ++n) {
-    out.addNode(g.isStart(n), g.isAccept(n));
-  }
-  for (auto a = 0; a < g.numArcs(); ++a) {
-    out.addArc(
-        g.srcNode(a),
-        g.dstNode(a),
-        projection == Projection::OUTPUT ? g.olabel(a) : g.ilabel(a),
-        projection == Projection::INPUT ? g.ilabel(a) : g.olabel(a),
-        g.weight(a));
+  Graph out = Graph::deepCopy(g);
+  out.setInputs({g.withoutWeights()});
+  out.setGradFunc(gradFunc);
+  auto& gData = out.getData();
+  if (projection == Projection::INPUT) {
+    gData.ilabels.copy(gData.olabels);
+  else if (projection == Projection::OUTPUT) {
+    gData.olabels.copy(gData.ilabels);
   }
   return out;
 }
