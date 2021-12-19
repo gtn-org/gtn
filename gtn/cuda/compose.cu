@@ -91,7 +91,9 @@ bool checkAnyTrue(const HDSpan<bool>& flags) {
 }
 
 void setFalse(HDSpan<bool>& span) {
-  cuda::detail::fill(span.data(), false, span.size());
+  if (span.size() != 0) {
+    cuda::detail::fill(span.data(), false, span.size());
+  }
 }
 
 std::tuple<int*, int> prefixSumScan(const bool* input, size_t numElts) {
@@ -102,11 +104,13 @@ std::tuple<int*, int> prefixSumScan(const bool* input, size_t numElts) {
   thrust::device_ptr<int> oPtr(output.data());
   thrust::exclusive_scan(iPtr, iPtr + numElts, oPtr, (int) 0);
 
-  int sum;
-  bool lastVal;
-  CUDA_CHECK(cudaMemcpy((void*)(&sum), (void* )(&(output[scanNumElts-2])), sizeof(int), cudaMemcpyDeviceToHost));
-  CUDA_CHECK(cudaMemcpy((void*)(&lastVal), (void* )(&(input[scanNumElts-2])), sizeof(bool), cudaMemcpyDeviceToHost));
-  sum += lastVal;
+  int sum = 0;
+  if (numElts > 0) {
+    bool lastVal;
+    CUDA_CHECK(cudaMemcpy((void*)(&sum), (void* )(&(output[scanNumElts-2])), sizeof(int), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy((void*)(&lastVal), (void* )(&(input[scanNumElts-2])), sizeof(bool), cudaMemcpyDeviceToHost));
+    sum += lastVal;
+  }
   CUDA_CHECK(cudaMemcpy((void*)(&(output[scanNumElts-1])),(void*)(&sum), sizeof(int), cudaMemcpyHostToDevice));
 
   return std::make_tuple(output.data(), sum);
@@ -850,7 +854,7 @@ Graph compose(const Graph& first, const Graph& second) {
   auto exploreIndices =  boolToIndices(newNodes);
 
   // Generate offsets for nodes and arcs
-  {
+  if (exploreIndices.size() > 0) {
     const int NT = 128;
     const int gridSize = div_up(exploreIndices.size(), NT);
 
