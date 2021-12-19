@@ -28,7 +28,7 @@ Graph linearGraph(int M, int N, bool calcGrad /* = true */) {
   gData.start.resize(M + 1, false);
   gData.start[0] = true;
   gData.accept.resize(M + 1, false);
-  gData.accept.back() = false;
+  gData.accept.back() = true;
   gData.startIds.resize(1, 0);
   gData.acceptIds.resize(1, M);
 

@@ -29,11 +29,6 @@ Graph emissions_graph(
   }
   auto g = linearGraph(T, N);
   g.setWeights(emissions_vec.data());
-  for (int i = 0; i < 6; ++i) {
-    std::cout << emissions_vec[i] << " ";
-  }
-  std::cout << std::endl;
-
   return g;
 }
 
@@ -71,7 +66,6 @@ TEST_CASE("test ctc", "[criterion]") {
     auto z = forwardScore(emissions);
     CHECK(z.item() == 0.0);
   }
-  return;
 
   {
     // Test case 2

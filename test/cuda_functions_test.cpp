@@ -1,6 +1,5 @@
-#define CATCH_CONFIG_MAIN
-
 #include <cmath>
+#include <sstream>
 
 #include "catch.hpp"
 #include "gtn/gtn.h"
@@ -27,7 +26,7 @@ Graph makeRandomDAG(int num_nodes, int num_arcs) {
   return graph;
 }
 
-TEST_CASE("Test Device Matching", "[cuda.functions]") {
+TEST_CASE("test device matching", "[cuda functions]") {
   auto g1 = Graph();
   g1.addNode(true);
   g1.addNode(false, true);
@@ -45,7 +44,7 @@ TEST_CASE("Test Device Matching", "[cuda.functions]") {
   }
 }
 
-TEST_CASE("Test Cuda Compose", "[cuda.compose]") {
+TEST_CASE("test cuda compose", "[cuda functions]") {
   auto check = [](const Graph& g1, const Graph& g2) {
     auto gOut = compose(g1, g2);
     auto gOutP = compose(g1.cuda(), g2.cuda()).cpu();
@@ -191,7 +190,7 @@ TEST_CASE("Test Cuda Compose", "[cuda.compose]") {
   }
 }
 
-TEST_CASE("Test Cuda Compose Epsilon", "[cuda.epsilon_compose]") {
+TEST_CASE("test cuda compose epsilon", "[cuda functions]") {
 
   auto check = [](const Graph& g1, const Graph& g2) {
     auto gOut = compose(g1, g2);
@@ -407,7 +406,7 @@ TEST_CASE("Test Cuda Compose Epsilon", "[cuda.epsilon_compose]") {
   }
 }
 
-TEST_CASE("Test Cuda Compose Grad", "[cuda.compose_grad]") {
+TEST_CASE("test cuda compose grad", "[cuda functions]") {
   Graph first;
   first.addNode(true);
   first.addNode();
@@ -453,9 +452,7 @@ TEST_CASE("Test Cuda Compose Grad", "[cuda.compose_grad]") {
   }
 }
 
-
-
-TEST_CASE("Test Cuda Compose Epsilon Grad", "[cuda.epsilon_compose_grad]") {
+TEST_CASE("test cuda compose epsilon grad", "[cuda functions]") {
   Graph first;
   first.addNode(true);
   first.addNode();
@@ -504,7 +501,7 @@ Graph makeChainGraph(const std::vector<int>& input) {
   return chain;
 }
 
-TEST_CASE("Test Edit Distance", "[cuda.edit_distance]") {
+TEST_CASE("test edit distance", "[cuda functions]") {
   auto computeEditDistance = [](const int numTokens,
                                 const std::vector<int>& x,
                                 const std::vector<int>& y,
@@ -567,7 +564,7 @@ TEST_CASE("Test Edit Distance", "[cuda.edit_distance]") {
 }
 
 
-TEST_CASE("Test NGrams", "[cuda.ngrams]") {
+TEST_CASE("test ngrams", "[cuda functions]") {
   auto countNgrams = [](const int numTokens,
                         const std::vector<int>& input,
                         const std::vector<int>& ngram,

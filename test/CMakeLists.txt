@@ -40,7 +40,7 @@ set(
   ${PROJECT_SOURCE_DIR}/test/parallel_test.cpp
   ${PROJECT_SOURCE_DIR}/test/rand_test.cpp
   ${PROJECT_SOURCE_DIR}/test/utils_test.cpp
-  #  ${GTN_CUDA_TEST_SOURCES}
+  ${GTN_CUDA_TEST_SOURCES}
 )
 
 add_executable(tests ${PROJECT_SOURCE_DIR}/test/tests.cpp)

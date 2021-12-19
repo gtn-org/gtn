@@ -8,7 +8,7 @@
 
 using namespace gtn;
 
-TEST_CASE("Test Cuda Utils", "[cuda]") {
+TEST_CASE("test cuda utils", "[cuda]") {
     CHECK(!cuda::isAvailable());
     CHECK_THROWS(cuda::deviceCount());
     CHECK_THROWS(cuda::getDevice());
@@ -29,7 +29,7 @@ TEST_CASE("Test Cuda Utils", "[cuda]") {
     CHECK(a[2] == 1);
 }
 
-TEST_CASE("Test Graph CUDA", "[Graph.cuda]") {
+TEST_CASE("test graph cuda", "[cuda]") {
     Graph g;
     CHECK(!g.isCuda());
     CHECK(equal(g.cpu(), g));

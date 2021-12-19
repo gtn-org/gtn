@@ -11,6 +11,7 @@
 
 #include "catch.hpp"
 
+#include "common.h"
 #include "gtn/creations.h"
 #include "gtn/functions.h"
 #include "gtn/graph.h"

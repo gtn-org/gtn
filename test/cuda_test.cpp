@@ -1,12 +1,10 @@
-#define CATCH_CONFIG_MAIN
-
 #include "catch.hpp"
 
 #include <gtn/gtn.h>
 
 using namespace gtn;
 
-TEST_CASE("Test Cuda Utils", "[cuda]") {
+TEST_CASE("test cuda utils", "[cuda]") {
     CHECK(cuda::isAvailable());
     int numDevices = cuda::deviceCount();
     CHECK(numDevices > 0);
@@ -19,7 +17,7 @@ TEST_CASE("Test Cuda Utils", "[cuda]") {
     CHECK(device == numDevices - 1);
 }
 
-TEST_CASE("Test Graph CUDA", "[Graph.cuda]") {
+TEST_CASE("test graph cuda", "[cuda]") {
   {
     Graph g;
     CHECK(!g.isCuda());
@@ -99,7 +97,7 @@ TEST_CASE("Test Graph CUDA", "[Graph.cuda]") {
   }
 }
 
-TEST_CASE("Test Graph Data CUDA", "[Graph.cudaData]") {
+TEST_CASE("test graph data cuda", "[cuda]") {
   Graph g;
   g.addNode();
   g.addNode();
