@@ -60,6 +60,7 @@ Graph linearGraph(int M, int N, bool calcGrad /* = true */) {
   gData.inArcOffset.back() = numArcs;
   gData.outArcOffset.back() = numArcs;
   gData.compiled = true;
+  g.getWeights().resize(numArcs);
 
   g.markArcSorted();
   g.markArcSorted(true);

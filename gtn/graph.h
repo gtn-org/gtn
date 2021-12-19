@@ -247,6 +247,14 @@ class Graph {
     return sharedGraph_->olabelSorted;
   }
 
+  const detail::HDSpan<float> getWeights() const {
+    return *sharedWeights_;
+  }
+
+  detail::HDSpan<float>& getWeights() {
+    return *sharedWeights_;
+  }
+
   /**
    * Returns an array of weights from a graph. The array will contain
    * `Graph::numArcs()` elements.
