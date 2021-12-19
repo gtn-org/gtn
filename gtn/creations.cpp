@@ -46,12 +46,14 @@ Graph linearGraph(int M, int N, bool calcGrad /* = true */) {
   std::iota(gData.inArcs.begin(), gData.inArcs.end(), 0);
   std::iota(gData.outArcs.begin(), gData.outArcs.end(), 0);
   for (int m = 0; m < M; ++m) {
-    std::fill(gData.srcNodes.begin() + m * N, gData.srcNodes.begin() + (m + 1) * N, m);
-    std::fill(gData.dstNodes.begin() + m * N, gData.dstNodes.begin() + (m + 1) * N, m + 1);
-    std::iota(gData.ilabels.begin() + m * N, gData.ilabels.begin() + (m + 1) * N, 0);
-    std::iota(gData.olabels.begin() + m * N, gData.olabels.begin() + (m + 1) * N, 0);
-    gData.inArcOffset[m + 1] = m * N;
-    gData.outArcOffset[m] = m * N;
+    int s = m * N;
+    int e = s + N;
+    std::fill(gData.srcNodes.begin() + s, gData.srcNodes.begin() + e, m);
+    std::fill(gData.dstNodes.begin() + s, gData.dstNodes.begin() + e, m + 1);
+    std::iota(gData.ilabels.begin() + s, gData.ilabels.begin() + e, 0);
+    std::iota(gData.olabels.begin() + s, gData.olabels.begin() + e, 0);
+    gData.inArcOffset[m + 1] = s;
+    gData.outArcOffset[m] = s;
   }
   gData.inArcOffset[0] = 0;
   gData.outArcOffset[M] = numArcs;
