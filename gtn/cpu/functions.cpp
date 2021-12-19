@@ -65,22 +65,6 @@ Graph subtract(const Graph& g1, const Graph& g2) {
   return result;
 }
 
-Graph clone(const Graph& g, Projection projection /* = Projection::NONE */) {
-  auto gradFunc = [](std::vector<Graph>& inputs, Graph& deltas) {
-    inputs[0].addGrad(deltas);
-  };
-  Graph out = Graph::deepCopy(g);
-  out.setInputs({g.withoutWeights()});
-  out.setGradFunc(gradFunc);
-  auto& gData = out.getData();
-  if (projection == Projection::INPUT) {
-    gData.ilabels.copy(gData.olabels);
-  else if (projection == Projection::OUTPUT) {
-    gData.olabels.copy(gData.ilabels);
-  }
-  return out;
-}
-
 Graph concat(const std::vector<Graph>& graphs) {
   auto gradFunc = [](std::vector<Graph>& inputs, Graph& deltas) {
     auto grad = deltas.weights();

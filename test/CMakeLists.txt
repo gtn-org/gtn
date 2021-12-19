@@ -15,44 +15,44 @@ function(find_python_exec DST)
   set(${DST} ${OUT} PARENT_SCOPE)
 endfunction()
 
-function(build_test SRCFILE)
-  get_filename_component(src_name ${SRCFILE} NAME_WE)
-  set(target "${src_name}")
-  add_executable(${target} ${SRCFILE})
-  target_link_libraries(
-    ${target}
-    PRIVATE
-    gtn
-    )
-  target_include_directories(
-    ${target}
-    PRIVATE
-    ${PROJECT_SOURCE_DIR}/..
-    )
-  add_test(${target} ${target})
-endfunction(build_test)
+if (GTN_BUILD_CUDA)
+  set(
+    GTN_CUDA_TEST_SOURCES
+    ${PROJECT_SOURCE_DIR}/test/cuda_test.cpp
+    ${PROJECT_SOURCE_DIR}/test/cuda_functions_test.cpp
+  )
+else()
+  set(
+    GTN_CUDA_TEST_SOURCES
+    ${PROJECT_SOURCE_DIR}/test/no_cuda_test.cpp
+  )
+endif()
 
-if (GTN_BUILD_TESTS)
-  build_test(${PROJECT_SOURCE_DIR}/test/autograd_test.cpp)
-  build_test(${PROJECT_SOURCE_DIR}/test/creations_test.cpp)
-  build_test(${PROJECT_SOURCE_DIR}/test/criterion_test.cpp)
-  build_test(${PROJECT_SOURCE_DIR}/test/functions_test.cpp)
-  build_test(${PROJECT_SOURCE_DIR}/test/graph_test.cpp)
-  build_test(${PROJECT_SOURCE_DIR}/test/hd_span_test.cpp)
-  build_test(${PROJECT_SOURCE_DIR}/test/parallel_test.cpp)
-  build_test(${PROJECT_SOURCE_DIR}/test/rand_test.cpp)
-  build_test(${PROJECT_SOURCE_DIR}/test/utils_test.cpp)
-  if (GTN_BUILD_CUDA)
-    build_test(${PROJECT_SOURCE_DIR}/test/cuda_test.cpp)
-    build_test(${PROJECT_SOURCE_DIR}/test/cuda_functions_test.cpp)
-  else()
-    build_test(${PROJECT_SOURCE_DIR}/test/no_cuda_test.cpp)
-  endif()
-  if (GTN_BUILD_PYTHON_BINDINGS)
-    find_python_exec(PYTHON_EXEC_PATH)
-    add_test(
-      NAME PythonBindingsTest
-      COMMAND ${PYTHON_EXEC_PATH} -m unittest discover -v ${PROJECT_SOURCE_DIR}/bindings/python/test
-    )
-  endif()
-endif ()
+set(
+  GTN_TEST_SOURCES
+  ${PROJECT_SOURCE_DIR}/test/common.h
+  ${PROJECT_SOURCE_DIR}/test/autograd_test.cpp
+  ${PROJECT_SOURCE_DIR}/test/creations_test.cpp
+  ${PROJECT_SOURCE_DIR}/test/criterion_test.cpp
+  ${PROJECT_SOURCE_DIR}/test/functions_test.cpp
+  ${PROJECT_SOURCE_DIR}/test/graph_test.cpp
+  ${PROJECT_SOURCE_DIR}/test/hd_span_test.cpp
+  ${PROJECT_SOURCE_DIR}/test/parallel_test.cpp
+  ${PROJECT_SOURCE_DIR}/test/rand_test.cpp
+  ${PROJECT_SOURCE_DIR}/test/utils_test.cpp
+  #  ${GTN_CUDA_TEST_SOURCES}
+)
+
+add_executable(tests ${PROJECT_SOURCE_DIR}/test/tests.cpp)
+target_sources(tests PRIVATE ${GTN_TEST_SOURCES})
+target_link_libraries(tests PRIVATE gtn)
+target_include_directories(tests PRIVATE ${PROJECT_SOURCE_DIR}/..)
+add_test(tests tests)
+
+#if (GTN_BUILD_PYTHON_BINDINGS)
+#  find_python_exec(PYTHON_EXEC_PATH)
+#  add_test(
+#    NAME PythonBindingsTest
+#    COMMAND ${PYTHON_EXEC_PATH} -m unittest discover -v ${PROJECT_SOURCE_DIR}/bindings/python/test
+#  )
+#endif()

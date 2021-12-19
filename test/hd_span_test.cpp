@@ -1,27 +1,13 @@
-#define CATCH_CONFIG_MAIN
 
 #include "catch.hpp"
 
+#include "common.h"
 #include "gtn/hd_span.h"
 #include "gtn/cuda/cuda.h"
 
 using namespace gtn::detail;
 
-// Override globals just for testing
-size_t allocations;
-size_t deallocations;
-
-void* operator new(std::size_t size) {
-  allocations++;
-  return std::malloc(size);
-}
-
-void operator delete(void* p) throw() {
-  deallocations++;
-  free(p);
-}
-
-TEST_CASE("Test HDSpan", "[HDSpan]") {
+TEST_CASE("test hd_span", "[hd_span]") {
   {
     HDSpan<int> s;
     CHECK(s.size() == 0);
@@ -122,7 +108,7 @@ TEST_CASE("Test HDSpan", "[HDSpan]") {
   }
 }
 
-TEST_CASE("Test HDSpan CUDA", "[HDSpan.cuda]") {
+TEST_CASE("test hd_span cuda", "[hdspan]") {
   if (!gtn::cuda::isAvailable()) {
     return;
   }

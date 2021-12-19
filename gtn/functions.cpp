@@ -69,11 +69,19 @@ DISPATCH2(add)
 DISPATCH2(subtract)
 
 Graph clone(const Graph& g, Projection projection /* = Projection::NONE */) {
-  if (g.isCuda()) {
-    return cuda::clone(g, projection);
-  } else {
-    return cpu::clone(g, projection);
+  auto gradFunc = [](std::vector<Graph>& inputs, Graph& deltas) {
+    inputs[0].addGrad(deltas.weights());
+  };
+  Graph out = Graph::deepCopy(g);
+  out.setInputs({g.withoutWeights()});
+  out.setGradFunc(gradFunc);
+  auto& gData = out.getData();
+  if (projection == Projection::OUTPUT) {
+    gData.ilabels.copy(gData.olabels.data());
+  } else if (projection == Projection::INPUT) {
+    gData.olabels.copy(gData.ilabels.data());
   }
+  return out;
 }
 
 Graph projectInput(const Graph& g) {

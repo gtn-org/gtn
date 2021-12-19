@@ -1,13 +1,10 @@
 #include <algorithm>
 #include <sstream>
 #include <thrust/device_ptr.h>
-#include <thrust/fill.h>
 
 #include "cuda.h"
-#include "gtn/hd_span.h"
 
 namespace gtn {
-
 namespace cuda {
 
 bool isAvailable() {
@@ -41,21 +38,6 @@ void add(const float* a, const float* b, float* out, size_t size, bool isCuda) {
   } else {
     std::transform(a, a + size, b, out, std::plus<>());
   }
-}
-
-void fill(bool* dst, bool val, size_t size) {
-  thrust::device_ptr<bool> dPtr(dst);
-  thrust::fill(dPtr, dPtr + size, val);
-}
-
-void fill(int* dst, int val, size_t size) {
-  thrust::device_ptr<int> dPtr(dst);
-  thrust::fill(dPtr, dPtr + size, val);
-}
-
-void fill(float* dst, float val, size_t size) {
-  thrust::device_ptr<float> dPtr(dst);
-  thrust::fill(dPtr, dPtr + size, val);
 }
 
 void copy(void* dst, const void* src, size_t size) {
