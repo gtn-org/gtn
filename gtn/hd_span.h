@@ -125,9 +125,18 @@ class HDSpan {
     return data();
   };
 
+  const T* begin() const {
+    return data();
+  };
+
   T* end() {
     return data() + size();
   };
+
+  const T* end() const {
+    return data() + size();
+  };
+
 
   T back() const {
     return data()[size() - 1];
@@ -172,6 +181,26 @@ class HDSpan {
   bool isCuda_{false};
   int device_{0};
 };
+
+template <typename T>
+bool operator==(const HDSpan<T>& lhs, const HDSpan<T>& rhs) {
+  if (lhs.isCuda() != rhs.isCuda() || lhs.device() != rhs.device()) {
+    throw std::logic_error("Cannot compare to HDSpans on different devices");
+  }
+  if (lhs.size() != rhs.size()) {
+    return false;
+  }
+  if (lhs.isCuda()) {
+    return cuda::detail::equal(lhs.data(), rhs.data(), lhs.size());
+  } else {
+    return std::equal(lhs.begin(), lhs.end(), rhs.begin());
+  }
+}
+
+template <typename T>
+bool operator!=(const HDSpan<T>& lhs, const HDSpan<T>& rhs) {
+  return !(lhs == rhs);
+}
 
 } // namespace detail
 } // namespace gtn

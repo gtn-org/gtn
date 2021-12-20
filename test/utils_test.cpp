@@ -163,7 +163,7 @@ TEST_CASE("test graph equality", "[utils]") {
     g2.addArc(0, 1, 1, 1, 3.1);
     g2.addArc(1, 2, 2, 2, 5.1);
     g2.addArc(1, 1, 1, 1, 4.1);
-    CHECK(equal(g1, g2));
+    CHECK_FALSE(equal(g1, g2));
   }
 
   {

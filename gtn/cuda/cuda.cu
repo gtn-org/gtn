@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <sstream>
+#include <thrust/equal.h>
 #include <thrust/device_ptr.h>
 
 #include "cuda.h"
@@ -62,6 +63,24 @@ void cudaCheck(cudaError_t err, const char* file, int line) {
         << "] CUDA error: " << cudaGetErrorString(err);
     throw std::runtime_error(ess.str());
   }
+}
+
+bool equal(const float* lhs, const float* rhs, size_t size) {
+  thrust::device_ptr<const float> lhsPtr(lhs);
+  thrust::device_ptr<const float> rhsPtr(rhs);
+  return thrust::equal(lhsPtr, lhsPtr + size, rhsPtr);
+}
+
+bool equal(const int* lhs, const int* rhs, size_t size) {
+  thrust::device_ptr<const int> lhsPtr(lhs);
+  thrust::device_ptr<const int> rhsPtr(rhs);
+  return thrust::equal(lhsPtr, lhsPtr + size, rhsPtr);
+}
+
+bool equal(const bool* lhs, const bool* rhs, size_t size) {
+  thrust::device_ptr<const bool> lhsPtr(lhs);
+  thrust::device_ptr<const bool> rhsPtr(rhs);
+  return thrust::equal(lhsPtr, lhsPtr + size, rhsPtr);
 }
 
 void fill(float* dst, float val, size_t size) {

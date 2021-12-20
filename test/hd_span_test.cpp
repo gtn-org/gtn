@@ -106,9 +106,43 @@ TEST_CASE("test hd_span", "[hd_span]") {
     CHECK(h[0] == false);
     CHECK(h[1] == false);
   }
+
+  // Test equality
+  {
+    HDSpan<int> h1(2);
+    h1[0] = 1;
+    h1[1] = 2;
+
+    HDSpan<int> h2(2);
+    h2[0] = 1;
+    h2[1] = 2;
+    CHECK(h1 == h2);
+  }
+
+  {
+    HDSpan<int> h1(2);
+    h1[0] = 1;
+    h1[1] = 2;
+
+    HDSpan<int> h2(1);
+    h2[0] = 1;
+    CHECK(h1 != h2);
+  }
+
+  {
+    HDSpan<int> h1(2);
+    h1[0] = 1;
+    h1[1] = 2;
+
+    HDSpan<int> h2(2);
+    h2[0] = 1;
+    h2[1] = 3;
+    CHECK(h1 != h2);
+  }
+
 }
 
-TEST_CASE("test hd_span cuda", "[hdspan]") {
+TEST_CASE("test hd_span cuda", "[hd_span]") {
   if (!gtn::cuda::isAvailable()) {
     return;
   }
@@ -125,4 +159,26 @@ TEST_CASE("test hd_span cuda", "[hdspan]") {
   CHECK(sHost2[0] == 1);
   CHECK(sHost2[1] == 2);
   CHECK(sHost.size() == 2);
+
+  // Test equality
+  {
+    HDSpan<int> h1(2, 1, true);
+
+    HDSpan<int> h2(2, 1, true);
+    CHECK(h1 == h2);
+  }
+
+  {
+    HDSpan<int> h1(2, 1, true);
+
+    HDSpan<int> h2(1, 1, true);
+    CHECK(h1 != h2);
+  }
+
+  {
+    HDSpan<int> h1(2, 2, true);
+
+    HDSpan<int> h2(2, 1, true);
+    CHECK(h1 != h2);
+  }
 }

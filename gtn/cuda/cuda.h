@@ -58,6 +58,9 @@ void copy(void* dst, const void* src, size_t size);
 void* allocate(size_t size, int device);
 void free(void* ptr);
 
+bool equal(const float* lhs, const float* rhs, size_t size);
+bool equal(const int* lhs, const int* rhs, size_t size);
+bool equal(const bool* lhs, const bool* rhs, size_t size);
 void fill(float* dst, float val, size_t size);
 void fill(int* dst, int val, size_t size);
 void fill(bool* dst, bool val, size_t size);

@@ -20,6 +20,7 @@ if (GTN_BUILD_CUDA)
     GTN_CUDA_TEST_SOURCES
     ${PROJECT_SOURCE_DIR}/test/cuda_test.cpp
     ${PROJECT_SOURCE_DIR}/test/cuda_functions_test.cpp
+    ${PROJECT_SOURCE_DIR}/test/cuda_utils_test.cpp
   )
 else()
   set(
@@ -49,10 +50,10 @@ target_link_libraries(tests PRIVATE gtn)
 target_include_directories(tests PRIVATE ${PROJECT_SOURCE_DIR}/..)
 add_test(tests tests)
 
-#if (GTN_BUILD_PYTHON_BINDINGS)
-#  find_python_exec(PYTHON_EXEC_PATH)
-#  add_test(
-#    NAME PythonBindingsTest
-#    COMMAND ${PYTHON_EXEC_PATH} -m unittest discover -v ${PROJECT_SOURCE_DIR}/bindings/python/test
-#  )
-#endif()
+if (GTN_BUILD_PYTHON_BINDINGS)
+  find_python_exec(PYTHON_EXEC_PATH)
+  add_test(
+    NAME PythonBindingsTest
+    COMMAND ${PYTHON_EXEC_PATH} -m unittest discover -v ${PROJECT_SOURCE_DIR}/bindings/python/test
+  )
+endif()
