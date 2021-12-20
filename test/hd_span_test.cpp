@@ -102,7 +102,7 @@ TEST_CASE("test hd_span", "[hd_span]") {
   }
 
   {
-    HDSpan<bool> h(2, false, false);
+    HDSpan<bool> h(2, false, Device::CPU);
     CHECK(h[0] == false);
     CHECK(h[1] == false);
   }
@@ -162,23 +162,23 @@ TEST_CASE("test hd_span cuda", "[hd_span]") {
 
   // Test equality
   {
-    HDSpan<int> h1(2, 1, true);
+    HDSpan<int> h1(2, 1, Device::CUDA);
 
-    HDSpan<int> h2(2, 1, true);
+    HDSpan<int> h2(2, 1, Device::CUDA);
     CHECK(h1 == h2);
   }
 
   {
-    HDSpan<int> h1(2, 1, true);
+    HDSpan<int> h1(2, 1, Device::CUDA);
 
-    HDSpan<int> h2(1, 1, true);
+    HDSpan<int> h2(1, 1, Device::CUDA);
     CHECK(h1 != h2);
   }
 
   {
-    HDSpan<int> h1(2, 2, true);
+    HDSpan<int> h1(2, 2, Device::CUDA);
 
-    HDSpan<int> h2(2, 1, true);
+    HDSpan<int> h2(2, 1, Device::CUDA);
     CHECK(h1 != h2);
   }
 }

@@ -56,7 +56,7 @@ void backwardImpl(Graph g, bool retainGraph) {
 
 void backward(Graph g, bool retainGraph /* = false */) {
   // Seed the initial deltas
-  detail::HDSpan<float> deltas(g.numArcs(), 1.0, g.isCuda(), g.device());
+  detail::HDSpan<float> deltas(g.numArcs(), 1.0, g.device());
   g.addGrad(deltas.data());
   deltas.clear();
   backwardImpl(g, retainGraph);

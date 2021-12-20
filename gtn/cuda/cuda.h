@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(CUDA)
+#if defined(_CUDA_)
 #include <cuda.h>
 #include <cuda_runtime.h>
 #define CUDA_CHECK(err) \
@@ -65,7 +65,7 @@ void fill(float* dst, float val, size_t size);
 void fill(int* dst, int val, size_t size);
 void fill(bool* dst, bool val, size_t size);
 
-#if defined(CUDA)
+#if defined(_CUDA_)
 void cudaCheck(cudaError_t err, const char* file, int line);
 #endif
 

@@ -23,7 +23,7 @@ find_package(Threads REQUIRED)
 
 if (GTN_BUILD_CUDA)
   include_directories(${CUDA_INCLUDE_DIRS})
-  add_definitions(-DCUDA)
+  add_definitions(-D_CUDA_)
   enable_language(CUDA)
   set(CMAKE_CUDA_STANDARD 14)
   set(CMAKE_CUDA_STANDARD_REQUIRED ON)

@@ -68,43 +68,43 @@ class Graph {
   };
 
   struct SharedGraph {
-    SharedGraph(bool isCuda = false, int device = 0) :
-      isCuda(isCuda), device(device) { }
+    SharedGraph(Device device = Device::CPU) :
+      device(device) { }
 
-    // GPU data and metadata
-    bool isCuda;
-    int device;
+    // Device data
+    Device device;
 
     /// Underlying graph data
     size_t numNodes{0};
     size_t numArcs{0};
 
-    detail::HDSpan<int> startIds{isCuda, device};
-    detail::HDSpan<int> acceptIds{isCuda, device};
-    detail::HDSpan<bool> accept{isCuda, device};
-    detail::HDSpan<bool> start{isCuda, device};
+    detail::HDSpan<int> startIds{device};
+    detail::HDSpan<int> acceptIds{device};
+    detail::HDSpan<bool> accept{device};
+    detail::HDSpan<bool> start{device};
 
     // One value per node - i-th value corresponds to i-th node
     // Last element is the total number of arcs, so that
     // each element and its neighbor forms a range
-    detail::HDSpan<int> inArcOffset{isCuda, device};
-    detail::HDSpan<int> outArcOffset{isCuda, device};
+    // TODO initialize these ?
+    detail::HDSpan<int> inArcOffset{device};
+    detail::HDSpan<int> outArcOffset{device};
 
     // One value per arc
-    detail::HDSpan<int> inArcs{isCuda, device};
-    detail::HDSpan<int> outArcs{isCuda, device};
+    detail::HDSpan<int> inArcs{device};
+    detail::HDSpan<int> outArcs{device};
 
     // One value per arc
     // i-th value corresponds to i-th arc
-    detail::HDSpan<int> ilabels{isCuda, device};
-    detail::HDSpan<int> olabels{isCuda, device};
-    detail::HDSpan<int> srcNodes{isCuda, device};
-    detail::HDSpan<int> dstNodes{isCuda, device};
+    detail::HDSpan<int> ilabels{device};
+    detail::HDSpan<int> olabels{device};
+    detail::HDSpan<int> srcNodes{device};
+    detail::HDSpan<int> dstNodes{device};
 
     // Some optional metadata about the graph
     bool ilabelSorted{false};
     bool olabelSorted{false};
-    bool compiled{isCuda};
+    bool compiled{device.isCuda()};
 
     void free() {
       startIds.clear();
@@ -204,10 +204,9 @@ class Graph {
    * autograd tape see `gtn::clone`.
    *
    * @param src The source graph to copy from.
-   * @param isCuda Whether or not to place the copy on the GPU
-   * @param device The GPU device id if the copy is on the GPU
+   * @param device The device to place the copy on
    */
-  static Graph deepCopy(const Graph& src, bool isCuda, int device = 0);
+  static Graph deepCopy(const Graph& src, Device device_);
 
   /**
    * Sort the arcs entering and exiting a node in increasing order by arc in
@@ -297,7 +296,7 @@ class Graph {
   /**
    * Return a copy of the graph on the GPU specified by `device`.
    */
-  Graph cuda(int device) const;
+  Graph cuda(Device device) const;
 
   /**
    * Get the `GraphData` object for the graph.
@@ -317,13 +316,13 @@ class Graph {
    * Returns true if the graph is on the GPU.
    */
   bool isCuda() const {
-    return sharedGraph_->isCuda;
+    return sharedGraph_->device.isCuda();
   }
 
   /**
    * Get the GPU device the graph is on.
    */
-  int device() const {
+  Device device() const {
     return sharedGraph_->device;
   }
 

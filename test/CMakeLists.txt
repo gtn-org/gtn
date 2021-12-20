@@ -35,6 +35,7 @@ set(
   ${PROJECT_SOURCE_DIR}/test/autograd_test.cpp
   ${PROJECT_SOURCE_DIR}/test/creations_test.cpp
   ${PROJECT_SOURCE_DIR}/test/criterion_test.cpp
+  ${PROJECT_SOURCE_DIR}/test/device_test.cpp
   ${PROJECT_SOURCE_DIR}/test/functions_test.cpp
   ${PROJECT_SOURCE_DIR}/test/graph_test.cpp
   ${PROJECT_SOURCE_DIR}/test/hd_span_test.cpp

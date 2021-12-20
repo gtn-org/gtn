@@ -2,15 +2,17 @@
 
 #include <algorithm>
 
+#include "device.h"
 #include "gtn/cuda/cuda.h"
 
-#if defined(CUDA)
+#if defined(_CUDA_)
 #define HDTAG __host__ __device__
 #else
 #define HDTAG
 #endif
 
 namespace gtn {
+
 namespace detail {
 
 template <class T>
@@ -20,9 +22,9 @@ class HDSpan {
 
   T* allocAndCopy(const T* other) {
     T* data;
-    if (isCuda_) {
+    if (isCuda()) {
       data = static_cast<T*>(
-          gtn::cuda::detail::allocate(sizeof(T) * space_, device_));
+          gtn::cuda::detail::allocate(sizeof(T) * space_, device_.index));
     } else {
       data = new T[space_];
     }
@@ -37,7 +39,7 @@ class HDSpan {
     if (data() == nullptr) {
       return;
     }
-    if (isCuda_) {
+    if (isCuda()) {
       gtn::cuda::detail::free(data());
     } else {
       delete[] data();
@@ -48,19 +50,19 @@ class HDSpan {
  public:
 
   explicit HDSpan() {};
-  explicit HDSpan(int size, T* data, bool isCuda, int device)
-    : size_(size), space_(size), data_(data), isCuda_(isCuda), device_(device) {
+  explicit HDSpan(int size, T* data, Device device)
+    : size_(size), space_(size), data_(data), device_(device) {
   };
-  explicit HDSpan(int size, T val, bool isCuda = false, int device = 0)
-      : isCuda_(isCuda), device_(device) {
+  explicit HDSpan(int size, T val, Device device = Device::CPU)
+      : device_(device) {
     resize(size, val);
   };
-  explicit HDSpan(int size, bool isCuda = false, int device = 0)
-    : isCuda_(isCuda), device_(device) {
+  explicit HDSpan(int size, Device device = Device::CPU)
+    : device_(device) {
       resize(size);
   };
-  explicit HDSpan(bool isCuda, int device = 0)
-    : isCuda_(isCuda), device_(device) {};
+  explicit HDSpan(Device device)
+    : device_(device) {};
 
   HDTAG
   const T operator[](size_t idx) const {
@@ -117,7 +119,7 @@ class HDSpan {
   };
 
   void push_back(T val) {
-    assert(!isCuda_);
+    assert(!isCuda());
     if (size_ == space_) {
       auto oldSize_  = size_;
       resize(space_ ? space_ << 1 : 1);
@@ -166,10 +168,10 @@ class HDSpan {
   };
 
   bool isCuda() const {
-    return isCuda_;
+    return device_.isCuda();
   };
 
-  int device() const {
+  Device device() const {
     return device_;
   };
 
@@ -183,8 +185,7 @@ class HDSpan {
   T* data_{nullptr};
   size_t size_{0};
   size_t space_{0};
-  bool isCuda_{false};
-  int device_{0};
+  Device device_{Device::CPU};
 };
 
 namespace {

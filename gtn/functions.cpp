@@ -47,13 +47,9 @@ Graph fn(const std::vector<Graph>& graphs) { \
 }
 
 void deviceCheck(const std::vector<Graph>& graphs, const std::string& name) {
-  bool isCuda = graphs[0].isCuda();
-  int device;
-  if (isCuda) {
-     device = graphs[0].device();
-  }
+  auto device = graphs[0].device();
   for (auto& g : graphs) {
-    if (g.isCuda() != isCuda || (isCuda && g.device() != device)) {
+    if (device != g.device()) {
       throw std::invalid_argument(
         "[gtn::" + name + "] Graphs must be on the same device");
     }

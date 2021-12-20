@@ -55,7 +55,7 @@ TEST_CASE("test device matching", "[cuda functions]") {
   CHECK_THROWS(compose(g1, g2.cuda()));
   CHECK_THROWS(compose(g1.cuda(), g2));
   if (cuda::deviceCount() > 1) {
-    CHECK_THROWS(compose(g1.cuda(0), g2.cuda(1)));
+    CHECK_THROWS(compose(g1.cuda(), g2.cuda(Device{Device::CUDA, 1})));
   }
 }
 

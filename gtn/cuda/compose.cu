@@ -99,7 +99,7 @@ void setFalse(HDSpan<bool>& span) {
 std::tuple<int*, int> prefixSumScan(const bool* input, size_t numElts) {
   const size_t scanNumElts = numElts + 1;
 
-  HDSpan<int> output(scanNumElts, 0, true);
+  HDSpan<int> output(scanNumElts, 0, Device::CUDA);
   thrust::device_ptr<const bool> iPtr(input);
   thrust::device_ptr<int> oPtr(output.data());
   thrust::exclusive_scan(iPtr, iPtr + numElts, oPtr, (int) 0);
@@ -119,7 +119,7 @@ std::tuple<int*, int> prefixSumScan(const bool* input, size_t numElts) {
 std::tuple<int*, int> prefixSumScan(const int* input, size_t numElts) {
   const size_t scanNumElts = numElts + 1;
 
-  HDSpan<int> output(scanNumElts, 0, true);
+  HDSpan<int> output(scanNumElts, 0, Device::CUDA);
   thrust::device_ptr<const int> iPtr(input);
   thrust::device_ptr<int> oPtr(output.data());
   thrust::inclusive_scan(iPtr, iPtr + numElts, oPtr + 1);
@@ -691,7 +691,7 @@ void calcGrad(Graph& g, int* arcIds, const Graph& deltas) {
     return;
   }
 
-  HDSpan<float> grad(g.numArcs(), 0, true);
+  HDSpan<float> grad(g.numArcs(), 0.0, Device::CUDA);
   const int NT = 128;
   const int gridSize = div_up(deltas.numArcs(), NT);
   gradKernel<<<gridSize, NT, 0, 0>>>(
@@ -717,7 +717,7 @@ auto boolToIndices(const HDSpan<bool>& vals) {
   const int NT = 128;
   const int gridSize = div_up(vals.size(), NT);
 
-  HDSpan<int> ids(numTrue, true, vals.device());
+  HDSpan<int> ids(numTrue, Device::CUDA);
   boolToIndicesKernel<<<gridSize, NT, 0, 0>>>(ids, counts, vals, vals.size());
   CUDA_CHECK(cudaFree(counts));
   return ids;
@@ -742,9 +742,8 @@ Graph compose(const Graph& first, const Graph& second) {
   //////////////////////////////////////////////////////////////////////////
   // Step 1: Data parallel findReachable
   //////////////////////////////////////////////////////////////////////////
-  HDSpan<bool> reachable(numAllPairNodes, false, true);
-  HDSpan<bool> toExplore(numAllPairNodes, false, true);
-
+  HDSpan<bool> reachable(numAllPairNodes, false, Device::CUDA);
+  HDSpan<bool> toExplore(numAllPairNodes, false, Device::CUDA);
   findReachableInit(g1, g2, reachable, toExplore); 
 
   // This is the outer control loop that would spawn DP kernels
@@ -787,7 +786,7 @@ Graph compose(const Graph& first, const Graph& second) {
   // in the combined graph
   //////////////////////////////////////////////////////////////////////////
 
-  HDSpan<bool> newNodes(numAllPairNodes, 0, true);
+  HDSpan<bool> newNodes(numAllPairNodes, 0.0, Device::CUDA);
   int* numOutArcs;
   int* numInArcs;
 

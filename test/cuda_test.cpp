@@ -32,15 +32,15 @@ TEST_CASE("test graph cuda", "[cuda]") {
     CHECK(gdev.numNodes() == g.numNodes());
     CHECK(gdev.numArcs() == g.numArcs());
     CHECK(gdev.isCuda());
-    CHECK(gdev.device() == cuda::getDevice());
+    CHECK(gdev.device() == Device::CUDA);
     CHECK(gdev.item() == 0.5);
     CHECK_THROWS(gdev.arcSort());
     // gpu to gpu on the same device is a no-op
     CHECK(gdev.id() == gdev.cuda().id());
     // Copying to another device or between devices
     if (cuda::deviceCount() > 1) {
-      CHECK(equal(g.cuda(1).cpu(), g));
-      CHECK(equal(gdev.cuda(1).cpu(), g));
+      CHECK(equal(g.cuda(Device{Device::CUDA, 1}).cpu(), g));
+      CHECK(equal(gdev.cuda(Device{Device::CUDA, 1}).cpu(), g));
     }
     auto ghost = gdev.cpu();
     CHECK(!ghost.isCuda());
