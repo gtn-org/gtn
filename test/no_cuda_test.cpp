@@ -1,5 +1,3 @@
-#define CATCH_CONFIG_MAIN
-
 #include "catch.hpp"
 
 #include "gtn/graph.h"
@@ -17,16 +15,10 @@ TEST_CASE("test cuda utils", "[cuda]") {
     CHECK_THROWS(cuda::detail::free((void*)0));
     std::vector<float> a = {1, 0, 1};
     std::vector<float> b = {0, 1, 0};
-    CHECK_THROWS(cuda::detail::add(a.data(), b.data(), b.data(), 3, true));
-    cuda::detail::add(a.data(), b.data(), b.data(), 3, false);
-    CHECK(b[0] == 1);
-    CHECK(b[1] == 1);
-    CHECK(b[2] == 1);
+    CHECK_THROWS(cuda::detail::add(a.data(), b.data(), b.data(), 3));
     CHECK_THROWS(cuda::detail::fill(nullptr, 0, 0));
     cuda::detail::copy(a.data(), b.data(), sizeof(float) * 3);
-    CHECK(a[0] == 1);
-    CHECK(a[1] == 1);
-    CHECK(a[2] == 1);
+    CHECK(a == b);
 }
 
 TEST_CASE("test graph cuda", "[cuda]") {
