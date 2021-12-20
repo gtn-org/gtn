@@ -52,7 +52,7 @@ class DeviceManager {
   int device_;
 };
 
-void add(const float* a, const float* b, float* out, size_t size, bool isCuda);
+void add(const float* a, const float* b, float* out, size_t size);
 
 void copy(void* dst, const void* src, size_t size);
 void* allocate(size_t size, int device);

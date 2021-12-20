@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 #include "gtn/cuda/cuda.h"
 
 #if defined(CUDA)
@@ -46,6 +48,9 @@ class HDSpan {
  public:
 
   explicit HDSpan() {};
+  explicit HDSpan(int size, T* data, bool isCuda, int device)
+    : size_(size), space_(size), data_(data), isCuda_(isCuda), device_(device) {
+  };
   explicit HDSpan(int size, T val, bool isCuda = false, int device = 0)
       : isCuda_(isCuda), device_(device) {
     resize(size, val);
@@ -182,10 +187,25 @@ class HDSpan {
   int device_{0};
 };
 
+namespace {
+
+template <typename T>
+bool isSameDevice(const HDSpan<T>& a, const HDSpan<T>& b) {
+  return a.isCuda() == b.isCuda() && a.device() == b.device();
+}
+
+template <typename T>
+bool isSameDevice(const HDSpan<T>& a, const HDSpan<T>& b, const HDSpan<T>& c) {
+  return a.isCuda() == b.isCuda() && b.isCuda() == c.isCuda() &&
+    a.device() == b.device() && b.device() == c.device();
+}
+
+} // namespace
+
 template <typename T>
 bool operator==(const HDSpan<T>& lhs, const HDSpan<T>& rhs) {
-  if (lhs.isCuda() != rhs.isCuda() || lhs.device() != rhs.device()) {
-    throw std::logic_error("Cannot compare to HDSpans on different devices");
+  if (!isSameDevice(lhs, rhs)) {
+    throw std::logic_error("Cannot compare two HDSpans on different devices");
   }
   if (lhs.size() != rhs.size()) {
     return false;
@@ -200,6 +220,22 @@ bool operator==(const HDSpan<T>& lhs, const HDSpan<T>& rhs) {
 template <typename T>
 bool operator!=(const HDSpan<T>& lhs, const HDSpan<T>& rhs) {
   return !(lhs == rhs);
+}
+
+template <typename T>
+void add(const HDSpan<T>& lhs, const HDSpan<T>& rhs, HDSpan<T>& out) {
+  if (!isSameDevice(lhs, rhs, out)) {
+    throw std::logic_error("Cannot add HDSpans on different devices");
+  }
+  if (lhs.size() != rhs.size()) {
+    throw std::logic_error("Cannot add HDSpans of different sizes");
+  }
+  if (lhs.isCuda()) {
+    cuda::detail::add(lhs.data(), rhs.data(), out.data(), lhs.size());
+  } else {
+    std::transform(
+        lhs.begin(), lhs.end(), rhs.begin(), out.begin(), std::plus<>());
+  }
 }
 
 } // namespace detail

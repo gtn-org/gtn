@@ -29,16 +29,12 @@ void setDevice(int device) {
 
 namespace detail {
 
-void add(const float* a, const float* b, float* out, size_t size, bool isCuda) {
-  if (isCuda) {
-    throw std::logic_error("[cuda:add] CUDA not available.");
-  } else {
-    std::transform(a, a + size, b, out, std::plus<>());
-  }
+void add(const float* a, const float* b, float* out, size_t size) {
+  throw std::logic_error("[cuda::detail::add] CUDA not available.");
 }
 
 float* ones(size_t size, int device) {
-  throw std::logic_error("[cuda::ones] CUDA not available.");
+  throw std::logic_error("[cuda::detail::ones] CUDA not available.");
 }
 
 void copy(void* dst, const void* src, size_t size) {
@@ -46,23 +42,31 @@ void copy(void* dst, const void* src, size_t size) {
 }
 
 void* allocate(size_t size, int device) {
-  throw std::logic_error("[cuda::allocate] CUDA not available.");
+  throw std::logic_error("[cuda::detail::allocate] CUDA not available.");
 }
 
 void free(void* ptr) {
-  throw std::logic_error("[cuda::free] CUDA not available.");
+  throw std::logic_error("[cuda::detail::free] CUDA not available.");
+}
+
+bool equal(const float* lhs, const float* rhs, size_t size) {
+  throw std::logic_error("[cuda::detail::equal] CUDA not available.");
+}
+bool equal(const int* lhs, const int* rhs, size_t size) {
+  throw std::logic_error("[cuda::detail::equal] CUDA not available.");
+}
+bool equal(const bool* lhs, const bool* rhs, size_t size) {
+  throw std::logic_error("[cuda::detail::equal] CUDA not available.");
 }
 
 void fill(float* dst, float val, size_t size) {
-  throw std::logic_error("[cuda::fill] CUDA not available.");
+  throw std::logic_error("[cuda::detail::fill] CUDA not available.");
 }
-
 void fill(int* dst, int val, size_t size) {
-  throw std::logic_error("[cuda::fill] CUDA not available.");
+  throw std::logic_error("[cuda::detail::fill] CUDA not available.");
 }
-
 void fill(bool* dst, bool val, size_t size) {
-  throw std::logic_error("[cuda::fill] CUDA not available.");
+  throw std::logic_error("[cuda::detail::fill] CUDA not available.");
 }
 
 
@@ -70,10 +74,6 @@ void fill(bool* dst, bool val, size_t size) {
 
 Graph negate(const Graph& g) {
   throw std::logic_error("[cuda::negate] CUDA not available.");
-}
-
-Graph add(const Graph& g1, const Graph& g2) {
-  throw std::logic_error("[cuda::add] CUDA not available.");
 }
 
 Graph subtract(const Graph& g1, const Graph& g2) {

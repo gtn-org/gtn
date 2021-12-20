@@ -31,22 +31,6 @@ Graph negate(const Graph& g) {
   return result;
 }
 
-Graph add(const Graph& g1, const Graph& g2) {
-  if (g1.numArcs() != 1 || g2.numArcs() != 1) {
-    throw std::logic_error("[gtn::add] inputs must have only one arc");
-  }
-  float weight = g1.item() + g2.item();
-  auto gradFunc = [](std::vector<Graph>& inputs, Graph& deltas) {
-    inputs[0].addGrad(deltas);
-    inputs[1].addGrad(deltas);
-  };
-  Graph result(gradFunc, {g1, g2});
-  result.addNode(true);
-  result.addNode(false, true);
-  result.addArc(0, 1, 0, 0, weight);
-  return result;
-}
-
 Graph subtract(const Graph& g1, const Graph& g2) {
   if (g1.numArcs() != 1 || g2.numArcs() != 1) {
     throw std::logic_error("[gtn::subtract] inputs must have only one arc");

@@ -33,7 +33,7 @@ TEST_CASE("test graph cuda", "[cuda]") {
     CHECK(gdev.numArcs() == g.numArcs());
     CHECK(gdev.isCuda());
     CHECK(gdev.device() == cuda::getDevice());
-    CHECK_THROWS(gdev.item());
+    CHECK(gdev.item() == 0.5);
     CHECK_THROWS(gdev.arcSort());
     // gpu to gpu on the same device is a no-op
     CHECK(gdev.id() == gdev.cuda().id());

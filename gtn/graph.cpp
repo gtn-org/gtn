@@ -13,6 +13,8 @@
 #include "graph.h"
 #include "cuda/cuda.h"
 
+using namespace gtn::detail;
+
 namespace gtn {
 
 namespace{
@@ -146,10 +148,6 @@ void Graph::compile() const {
 }
 
 float Graph::item() const {
-  if (isCuda()) {
-    throw std::invalid_argument(
-      "[Graph::item] Can only get scalar from CPU graphs");
-  }
   if (numArcs() > 1) {
     throw std::invalid_argument(
         "[Graph::item] Cannot convert Graph with more than 1 arc to a scalar.");
@@ -158,7 +156,13 @@ float Graph::item() const {
     throw std::invalid_argument(
         "[Graph::item] Cannot convert Graph with no arcs to a scalar.");
   }
-  return weight(0);
+  if (isCuda()) {
+    HDSpan<float> w(1);
+    w = getWeights();
+    return w[0];
+  } else {
+    return weight(0);
+  }
 }
 
 Graph& Graph::grad() {
@@ -203,8 +207,10 @@ void Graph::addGrad(const float* other) {
   if (calcGrad()) {
     std::lock_guard<std::mutex> lock(sharedGrad_->grad_lock);
     if (isGradAvailable()) {
-      cuda::detail::add(
-          other, grad().weights(), grad().weights(), numArcs(), isCuda());
+      add(
+          HDSpan<float>(numArcs(), const_cast<float*>(other), isCuda(), device()),
+          grad().getWeights(),
+          grad().getWeights());
     } else {
       sharedGrad_->grad = std::make_unique<Graph>(false);
       sharedGrad_->grad->sharedGraph_ = sharedGraph_;

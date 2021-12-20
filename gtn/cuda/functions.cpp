@@ -11,10 +11,6 @@ Graph negate(const Graph& g) {
   throw std::logic_error("[cuda::negate] GPU function not implemented.");
 }
 
-Graph add(const Graph& g1, const Graph& g2) {
-  throw std::logic_error("[cuda::add] GPU function not implemented.");
-}
-
 Graph subtract(const Graph& g1, const Graph& g2) {
   throw std::logic_error("[cuda::subtract] GPU function not implemented.");
 }

@@ -55,7 +55,7 @@ void deviceCheck(const std::vector<Graph>& graphs, const std::string& name) {
   for (auto& g : graphs) {
     if (g.isCuda() != isCuda || (isCuda && g.device() != device)) {
       throw std::invalid_argument(
-        "[" + name + "] Graphs must be on the same device");
+        "[gtn::" + name + "] Graphs must be on the same device");
     }
   }
 }
@@ -65,7 +65,23 @@ void deviceCheck(const Graph& g1, const Graph& g2, const std::string& name) {
 }
 
 DISPATCH1(negate)
-DISPATCH2(add)
+
+Graph add(const Graph& g1, const Graph& g2) {
+  deviceCheck(g1, g2, "add");
+  if (g1.numArcs() != 1 || g2.numArcs() != 1) {
+    throw std::logic_error("[gtn::add] inputs must have only one arc");
+  }
+  auto gradFunc = [](std::vector<Graph>& inputs, Graph& deltas) {
+    inputs[0].addGrad(deltas);
+    inputs[1].addGrad(deltas);
+  };
+  auto result = Graph::deepCopy(g1);
+  result.setInputs({g1, g2});
+  result.setGradFunc(gradFunc);
+  detail::add(g1.getWeights(), g2.getWeights(), result.getWeights());
+  return result;
+}
+
 DISPATCH2(subtract)
 
 Graph clone(const Graph& g, Projection projection /* = Projection::NONE */) {

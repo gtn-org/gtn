@@ -26,6 +26,21 @@ Graph makeRandomDAG(int num_nodes, int num_arcs) {
   return graph;
 }
 
+TEST_CASE("test cuda scalar ops", "[cuda functions]") {
+  auto g1 = scalarGraph(3.0).cuda();
+
+//  auto result = negate(g1);
+//  CHECK(result.item() == -3.0);
+
+  auto g2 = scalarGraph(4.0).cuda();
+
+  auto result = add(g1, g2);
+  CHECK(result.item() == 7.0);
+
+/*  result = subtract(g2, g1);
+  CHECK(result.item() == 1.0);*/
+}
+
 TEST_CASE("test device matching", "[cuda functions]") {
   auto g1 = Graph();
   g1.addNode(true);

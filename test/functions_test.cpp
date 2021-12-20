@@ -140,7 +140,6 @@ TEST_CASE("test composition", "[functions]") {
         "1 1 0\n"
         "1 2 1\n");
     Graph expected = loadTxt(in);
-    compose(g1, g2);
     CHECK(isomorphic(compose(g1, g2), expected));
     CHECK(isomorphic(intersect(g1, g2), expected));
 
@@ -1170,7 +1169,7 @@ TEST_CASE("test remove", "[functions]") {
     expected.addArc(2, 1, 0);
     expected.addArc(1, 3, 1);
     expected.addArc(0, 3, 1);
-    CHECK(equal(remove(g), expected));
+    CHECK(isomorphic(remove(g), expected));
   }
 
   {
