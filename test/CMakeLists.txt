@@ -19,6 +19,7 @@ if (GTN_BUILD_CUDA)
   set(
     GTN_CUDA_TEST_SOURCES
     ${PROJECT_SOURCE_DIR}/test/cuda_test.cpp
+    ${PROJECT_SOURCE_DIR}/test/cuda_creations_test.cpp
     ${PROJECT_SOURCE_DIR}/test/cuda_functions_test.cpp
     ${PROJECT_SOURCE_DIR}/test/cuda_utils_test.cpp
   )

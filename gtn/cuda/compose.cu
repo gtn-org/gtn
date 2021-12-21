@@ -58,7 +58,7 @@ struct ExploreState {
   bool followSecond;
 };
 
-inline int div_up(int x, int y) {
+inline int divUp(int x, int y) {
   return (x + y - 1) / y;
 }
 
@@ -212,7 +212,7 @@ int* calculateArcCrossProductOffset(
   CUDA_CHECK(cudaMalloc((void **)(&(arcCrossProductOffset)), sizeof(int) * numToExploreNodePair));
 
   const int NT = 128;
-  const int gridSize = div_up(numToExploreNodePair, NT);
+  const int gridSize = divUp(numToExploreNodePair, NT);
 
   if (inOrOutArc) {
     calculateArcCrossProductBackwardKernel<<<gridSize, NT, 0, 0>>>(
@@ -632,7 +632,7 @@ void findReachableInit(
     HDSpan<bool> toExplore) {
   int NT = 16; 
   auto blocks = dim3(
-      div_up(g1.acceptIds.size(), NT), div_up(g2.acceptIds.size(), NT));
+      divUp(g1.acceptIds.size(), NT), divUp(g2.acceptIds.size(), NT));
   auto threads = dim3(NT, NT);
   findReachableInitKernel<<<blocks, threads>>>(g1.acceptIds, g2.acceptIds,
     reachable, toExplore, g1.numNodes);
@@ -667,7 +667,7 @@ void secondPassInit(
     HDSpan<bool> newNodes) {
   int NT = 16; 
   auto blocks = dim3(
-      div_up(g1.startIds.size(), NT), div_up(g2.startIds.size(), NT));
+      divUp(g1.startIds.size(), NT), divUp(g2.startIds.size(), NT));
   auto threads = dim3(NT, NT);
   secondPassInitKernel<<<blocks, threads>>>(g1.startIds, g2.startIds,
     reachable, toExplore, newNodes, g1.numNodes);
@@ -693,7 +693,7 @@ void calcGrad(Graph& g, int* arcIds, const Graph& deltas) {
 
   HDSpan<float> grad(g.numArcs(), 0.0, Device::CUDA);
   const int NT = 128;
-  const int gridSize = div_up(deltas.numArcs(), NT);
+  const int gridSize = divUp(deltas.numArcs(), NT);
   gradKernel<<<gridSize, NT, 0, 0>>>(
       arcIds, deltas.weights(), grad.data(), deltas.numArcs());
   g.addGrad(grad.data());
@@ -715,7 +715,7 @@ auto boolToIndices(const HDSpan<bool>& vals) {
   std::tie(counts, numTrue) = prefixSumScan(vals.data(), vals.size());
 
   const int NT = 128;
-  const int gridSize = div_up(vals.size(), NT);
+  const int gridSize = divUp(vals.size(), NT);
 
   HDSpan<int> ids(numTrue, Device::CUDA);
   boolToIndicesKernel<<<gridSize, NT, 0, 0>>>(ids, counts, vals, vals.size());
@@ -768,7 +768,7 @@ Graph compose(const Graph& first, const Graph& second) {
 
     if (totalArcs > 0) {
 
-      const int gridSize = div_up(totalArcs, NT);
+      const int gridSize = divUp(totalArcs, NT);
 
       findReachableKernel<<<gridSize, NT, 0, 0>>>(
           g1, g2, arcCrossProductOffset, exploreIndices,
@@ -822,7 +822,7 @@ Graph compose(const Graph& first, const Graph& second) {
 
     if (totalArcs > 0) {
 
-      const int gridSize = div_up(totalArcs, NT);
+      const int gridSize = divUp(totalArcs, NT);
 
       computeValidNodeAndArcKernel<<<gridSize, NT, 0, 0>>>(g1, g2,
         arcCrossProductOffset, exploreIndices, reachable, totalArcs,
@@ -855,7 +855,7 @@ Graph compose(const Graph& first, const Graph& second) {
   // Generate offsets for nodes and arcs
   if (exploreIndices.size() > 0) {
     const int NT = 128;
-    const int gridSize = div_up(exploreIndices.size(), NT);
+    const int gridSize = divUp(exploreIndices.size(), NT);
 
     calculateNumArcsKernel<<<gridSize, NT, 0, 0>>>(exploreIndices,
       numInArcs, numOutArcs, nData.inArcOffset, nData.outArcOffset);
@@ -911,13 +911,13 @@ Graph compose(const Graph& first, const Graph& second) {
     setFalse(nData.start);
     setFalse(nData.accept);
 
-    const int gridSize = div_up(exploreIndices.size(), NT);
+    const int gridSize = divUp(exploreIndices.size(), NT);
     setStartAndAccept<<<gridSize, NT, 0, 0>>>(g1, g2, exploreIndices, nData);
     nData.startIds = boolToIndices(nData.start);
     nData.acceptIds = boolToIndices(nData.accept);
   }
   if (totalArcs > 0) {
-    const int gridSize = div_up(totalArcs, NT);
+    const int gridSize = divUp(totalArcs, NT);
 
     generateNodeAndArcKernel<<<gridSize, NT, 0, 0>>>(g1, g2,
         first.weights(), second.weights(), arcCrossProductOffset, exploreIndices, newNodes,
