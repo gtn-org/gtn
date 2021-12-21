@@ -338,7 +338,7 @@ Graph Graph::cpu() const {
   return deepCopy(*this, Device::CPU);
 }
 
-Graph Graph::cuda(Device device_) const {
+Graph Graph::cuda(const Device& device_) const {
   if (!cuda::isAvailable()) {
     std::logic_error("[Graph::cuda] CUDA not available.");
   }

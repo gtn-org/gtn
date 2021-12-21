@@ -296,7 +296,7 @@ class Graph {
   /**
    * Return a copy of the graph on the GPU specified by `device`.
    */
-  Graph cuda(Device device) const;
+  Graph cuda(const Device& device) const;
 
   /**
    * Get the `GraphData` object for the graph.

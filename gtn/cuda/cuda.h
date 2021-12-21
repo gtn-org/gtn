@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 #if defined(_CUDA_)
 #include <cuda.h>
 #include <cuda_runtime.h>

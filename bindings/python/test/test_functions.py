@@ -869,7 +869,7 @@ class FunctionsTestCase(unittest.TestCase):
         expected.add_arc(2, 1, 0)
         expected.add_arc(1, 3, 1)
         expected.add_arc(0, 3, 1)
-        self.assertTrue(gtn.equal(gtn.remove(g), expected))
+        self.assertTrue(gtn.isomorphic(gtn.remove(g), expected))
 
         # Successive epsilons
         g = gtn.Graph()

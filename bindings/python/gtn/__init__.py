@@ -12,6 +12,7 @@ import tempfile
 
 from ._graph import *
 from ._graph import __version__
+from ._device import *
 from ._functions import *
 from ._autograd import *
 from ._utils import *
