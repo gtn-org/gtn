@@ -182,3 +182,49 @@ TEST_CASE("test hd_span cuda", "[hd_span]") {
     CHECK(h1 != h2);
   }
 }
+
+TEST_CASE("test hd_span operations", "[hd_span]") {
+  {
+    HDSpan<float> a(2, 1.0);
+    HDSpan<float> b(2, 2.0);
+    HDSpan<float> c(2);
+    add(a, b, c);
+    HDSpan<float> expected(2, 3.0);
+    CHECK(c == expected);
+    subtract(a, b, c);
+    expected = HDSpan<float>(2, -1.0);
+    CHECK(c == expected);
+    negate(a, b);
+    CHECK(b == expected);
+  }
+
+  if (!cuda::isAvailable()) {
+    return;
+  }
+
+  {
+    HDSpan<float> a(2, 1.0, Device::CUDA);
+    HDSpan<float> b(2, 2.0, Device::CPU);
+    HDSpan<float> c(2, Device::CPU);
+    CHECK_THROWS(add(a, b, c));
+    CHECK_THROWS(subtract(a, b, c));
+    CHECK_THROWS(negate(a, b));
+  }
+
+  {
+    // *NB* these may segfault if the test fails since catch will try to access
+    // device arrays using []
+    HDSpan<float> a(2, 1.0, Device::CUDA);
+    HDSpan<float> b(2, 2.0, Device::CUDA);
+    HDSpan<float> c(2, Device::CUDA);
+    add(a, b, c);
+    HDSpan<float> expected(2, 3.0, Device::CUDA);
+    CHECK(c == expected);
+    subtract(a, b, c);
+    HDSpan<float> result;
+    expected = HDSpan<float>(2, -1.0, Device::CUDA);
+    CHECK(c == expected);
+    negate(a, b);
+    CHECK(b == expected);
+  }
+}

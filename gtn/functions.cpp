@@ -60,7 +60,19 @@ void deviceCheck(const Graph& g1, const Graph& g2, const std::string& name) {
   deviceCheck({g1, g2}, name);
 }
 
-DISPATCH1(negate)
+Graph negate(const Graph& g) {
+  if (g.numArcs() != 1) {
+    throw std::logic_error("[gtn::negate] input must have only one arc");
+  }
+  auto gradFunc = [](std::vector<Graph>& inputs, Graph& deltas) {
+    inputs[0].addGrad(negate(deltas));
+  };
+  auto result = Graph::deepCopy(g);
+  result.setInputs({g});
+  result.setGradFunc(gradFunc);
+  detail::negate(g.getWeights(), result.getWeights());
+  return result;
+}
 
 Graph add(const Graph& g1, const Graph& g2) {
   deviceCheck(g1, g2, "add");
@@ -78,7 +90,24 @@ Graph add(const Graph& g1, const Graph& g2) {
   return result;
 }
 
-DISPATCH2(subtract)
+Graph subtract(const Graph& g1, const Graph& g2) {
+  deviceCheck(g1, g2, "subtract");
+  if (g1.numArcs() != 1 || g2.numArcs() != 1) {
+    throw std::logic_error("[gtn::subtract] inputs must have only one arc");
+  }
+  float weight = g1.item() - g2.item();
+  auto gradFunc = [](std::vector<Graph>& inputs, Graph& deltas) {
+    inputs[0].addGrad(deltas);
+    if (inputs[1].calcGrad()) {
+      inputs[1].addGrad(negate(deltas));
+    }
+  };
+  auto result = Graph::deepCopy(g1);
+  result.setInputs({g1, g2});
+  result.setGradFunc(gradFunc);
+  detail::subtract(g1.getWeights(), g2.getWeights(), result.getWeights());
+  return result;
+}
 
 Graph clone(const Graph& g, Projection projection /* = Projection::NONE */) {
   auto gradFunc = [](std::vector<Graph>& inputs, Graph& deltas) {

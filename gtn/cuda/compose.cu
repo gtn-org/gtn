@@ -880,12 +880,7 @@ Graph compose(const Graph& first, const Graph& second) {
   nData.olabels.resize(totalOutArcs);
   nData.srcNodes.resize(totalOutArcs);
   nData.dstNodes.resize(totalOutArcs);
-
-  {
-    float* weights;
-    CUDA_CHECK(cudaMalloc((void **)(&weights), sizeof(float) * totalOutArcs));
-    nGraph.setWeights(weights);
-  }
+  nGraph.getWeights().resize(totalOutArcs);
 
   nData.inArcOffset.copy(inArcOffsetGPU);
   nData.outArcOffset.copy(outArcOffsetGPU);

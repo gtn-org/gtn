@@ -1,6 +1,7 @@
 #include <sstream>
-#include <thrust/equal.h>
 #include <thrust/device_ptr.h>
+#include <thrust/equal.h>
+#include <thrust/execution_policy.h>
 
 #include "cuda.h"
 
@@ -29,11 +30,21 @@ void setDevice(int device) {
 
 namespace detail {
 
+void negate(const float* in, float* out, size_t size) {
+  thrust::transform(
+      thrust::device, in, in + size, out, thrust::negate<float>());
+}
+
 void add(const float* a, const float* b, float* out, size_t size) {
   thrust::device_ptr<const float> aPtr(a);
   thrust::device_ptr<const float> bPtr(b);
   thrust::device_ptr<float> outPtr(out);
   thrust::transform(aPtr, aPtr + size, bPtr, outPtr, thrust::plus<float>());
+}
+
+void subtract(const float* a, const float* b, float* out, size_t size) {
+  thrust::transform(
+      thrust::device, a, a + size, b, out, thrust::minus<float>());
 }
 
 void copy(void* dst, const void* src, size_t size) {

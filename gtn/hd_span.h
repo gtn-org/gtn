@@ -224,6 +224,21 @@ bool operator!=(const HDSpan<T>& lhs, const HDSpan<T>& rhs) {
 }
 
 template <typename T>
+void negate(const HDSpan<T>& in, HDSpan<T>& out) {
+  if (!isSameDevice(in, out)) {
+    throw std::logic_error("Cannot negate HDSpan on different device");
+  }
+  if (in.size() != out.size()) {
+    throw std::logic_error("Cannot negate HDSpans of different sizes");
+  }
+  if (in.isCuda()) {
+    cuda::detail::negate(in.data(), out.data(), in.size());
+  } else {
+    std::transform(in.begin(), in.end(), out.begin(), std::negate<>());
+  }
+}
+
+template <typename T>
 void add(const HDSpan<T>& lhs, const HDSpan<T>& rhs, HDSpan<T>& out) {
   if (!isSameDevice(lhs, rhs, out)) {
     throw std::logic_error("Cannot add HDSpans on different devices");
@@ -236,6 +251,22 @@ void add(const HDSpan<T>& lhs, const HDSpan<T>& rhs, HDSpan<T>& out) {
   } else {
     std::transform(
         lhs.begin(), lhs.end(), rhs.begin(), out.begin(), std::plus<>());
+  }
+}
+
+template <typename T>
+void subtract(const HDSpan<T>& lhs, const HDSpan<T>& rhs, HDSpan<T>& out) {
+  if (!isSameDevice(lhs, rhs, out)) {
+    throw std::logic_error("Cannot subtract HDSpans on different devices");
+  }
+  if (lhs.size() != rhs.size()) {
+    throw std::logic_error("Cannot subtract HDSpans of different sizes");
+  }
+  if (lhs.isCuda()) {
+    cuda::detail::subtract(lhs.data(), rhs.data(), out.data(), lhs.size());
+  } else {
+    std::transform(
+        lhs.begin(), lhs.end(), rhs.begin(), out.begin(), std::minus<>());
   }
 }
 

@@ -54,7 +54,9 @@ class DeviceManager {
   int device_;
 };
 
+void negate(const float* in, float* out, size_t size);
 void add(const float* a, const float* b, float* out, size_t size);
+void subtract(const float* a, const float* b, float* out, size_t size);
 
 void copy(void* dst, const void* src, size_t size);
 void* allocate(size_t size, int device);
