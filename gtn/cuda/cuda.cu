@@ -28,6 +28,15 @@ void setDevice(int device) {
   CUDA_CHECK(cudaSetDevice(device));
 }
 
+void synchronize() {
+  CUDA_CHECK(cudaDeviceSynchronize());
+}
+
+void synchronize(int device) {
+  detail::DeviceManager dm(device);
+  synchronize();
+}
+
 namespace detail {
 
 void negate(const float* in, float* out, size_t size) {

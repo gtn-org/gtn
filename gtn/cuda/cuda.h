@@ -36,6 +36,12 @@ int getDevice();
  */
 void setDevice(int device);
 
+/**
+ * Waits unitl all kernels in all streams are complete.
+ */
+void synchronize();
+void synchronize(int device);
+
 /** @} */
 
 namespace detail {

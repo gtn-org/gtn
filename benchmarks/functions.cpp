@@ -13,17 +13,22 @@
 
 using namespace gtn;
 
-void timeSimpleOps() {
+void timeSimpleOps(Device device = Device::CPU) {
   // time clone
-  auto graph = linearGraph(1000, 100);
+  auto graph = linearGraph(1000, 100, device);
   auto cloneForward = [&graph]() { auto cloned = clone(graph); };
-  TIME(cloneForward);
+  TIME_DEVICE(cloneForward, device);
 
   auto cloneBackward = [&graph, out = clone(graph)]() {
     graph.zeroGrad();
     backward(out, true);
   };
-  TIME(cloneBackward);
+  TIME_DEVICE(cloneBackward, device);
+
+  // TODO remove when other functions are implemented in CUDA
+  if (device.isCuda()) {
+    return;
+  }
 
   // time closure
   auto closureForward = [&graph]() { auto closed = closure(graph); };
@@ -94,12 +99,12 @@ void timeForward() {
   TIME(forwardScoreRandDAGBackward);
 }
 
-void timeCompose() {
+void timeCompose(Device device = Device::CPU) {
   const int N1 = 100;
   const int N2 = 50;
   const int A1 = 20;
   const int A2 = 500;
-  auto first = linearGraph(N1, A1);
+  auto first = linearGraph(N1, A1, device);
   auto second = linearGraph(N2, A2);
   for (int i = 0; i < N2; i++) {
     for (int j = 0; j < A2; j++) {
@@ -107,25 +112,29 @@ void timeCompose() {
       second.addArc(i, i, j);
     }
   }
-  auto out = compose(first, second);
+  second = Graph::deepCopy(second, device);
+
   auto composeForward = [&first, &second]() {
     auto out = compose(first, second);
   };
-  TIME(composeForward);
+  TIME_DEVICE(composeForward, device);
 
   auto composeBackward = [&first, &second, out = compose(first, second)] {
     first.zeroGrad();
     second.zeroGrad();
     backward(out, true);
   };
-  TIME(composeBackward);
+  TIME_DEVICE(composeBackward, device);
 
+  if (device.isCuda()) {
+    return;
+  }
   first.arcSort(true);
   second.arcSort();
   auto composeForwardSorted = [&first, &second]() {
     auto out = compose(first, second);
   };
-  TIME(composeForwardSorted) {}
+  TIME(composeForwardSorted);
 }
 
 int main() {
@@ -133,4 +142,8 @@ int main() {
   timeSimpleOps();
   timeForward();
   timeCompose();
+  if (cuda::isAvailable()) {
+    timeSimpleOps(Device::CUDA);
+    timeCompose(Device::CUDA);
+  }
 }

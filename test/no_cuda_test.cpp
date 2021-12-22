@@ -11,6 +11,7 @@ TEST_CASE("test cuda utils", "[cuda]") {
     CHECK_THROWS(cuda::deviceCount());
     CHECK_THROWS(cuda::getDevice());
     CHECK_THROWS(cuda::setDevice(0));
+    CHECK_THROWS(cuda::synchronize());
     CHECK_THROWS(cuda::detail::allocate(1, 0));
     CHECK_THROWS(cuda::detail::free((void*)0));
     std::vector<float> a = {1, 0, 1};

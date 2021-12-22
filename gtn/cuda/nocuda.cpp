@@ -24,7 +24,15 @@ int getDevice() {
 }
 
 void setDevice(int device) {
-  throw std::logic_error("[cuda::getDevice] CUDA not available.");
+  throw std::logic_error("[cuda::setDevice] CUDA not available.");
+}
+
+void synchronize() {
+  throw std::logic_error("[cuda::synchronize] CUDA not available.");
+}
+
+void synchronize(int device) {
+  throw std::logic_error("[cuda::synchronize] CUDA not available.");
 }
 
 namespace detail {

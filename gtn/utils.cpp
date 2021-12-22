@@ -52,8 +52,8 @@ bool equal(const Graph& g1, const Graph& g2) {
     return false;
   }
 
-  const auto g1Data = g1.getData();
-  const auto g2Data = g2.getData();
+  auto& g1Data = g1.getData();
+  auto& g2Data = g2.getData();
   bool eq = g1Data.ilabels == g2Data.ilabels;
   eq &= g1Data.olabels == g2Data.olabels;
   eq &= g1Data.srcNodes == g2Data.srcNodes;
