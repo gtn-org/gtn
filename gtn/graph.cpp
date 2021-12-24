@@ -330,23 +330,23 @@ std::vector<int> Graph::labelsToVector(bool ilabel) {
   return out;
 }
 
-Graph Graph::cpu() const {
-  // No-op if already on CPU
-  if (!isCuda()) {
-    return *this;
-  }
-  return deepCopy(*this, Device::CPU);
-}
-
-Graph Graph::cuda(const Device& device_) const {
-  if (!cuda::isAvailable()) {
-    std::logic_error("[Graph::cuda] CUDA not available.");
+Graph Graph::to(const Device& device_) const {
+  if (device_.isCuda() && !cuda::isAvailable()) {
+    std::logic_error("[Graph::to] CUDA not available.");
   }
   // No-op if already on device_
   if (device() == device_) {
     return *this;
   }
   return deepCopy(*this, device_);
+}
+
+Graph Graph::cpu() const {
+  return to(Device::CPU);
+}
+
+Graph Graph::cuda(const Device& device_) const {
+  return to(device_);
 }
 
 Graph Graph::cuda() const {

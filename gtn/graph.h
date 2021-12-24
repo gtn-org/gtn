@@ -246,7 +246,7 @@ class Graph {
     return sharedGraph_->olabelSorted;
   }
 
-  const detail::HDSpan<float> getWeights() const {
+  const detail::HDSpan<float>& getWeights() const {
     return *sharedWeights_;
   }
 
@@ -284,7 +284,16 @@ class Graph {
   std::vector<int> labelsToVector(bool ilabel = true);
 
   /**
-   * Return a copy of the graph to the CPU.
+   * Return a copy of the graph on the given device.
+   *
+   * The original graph is returned if it is already on the specified device.
+   */
+  Graph to(const Device& device) const;
+
+  /**
+   * Return a copy of the graph on the CPU.
+   *
+   * The original graph is returned if it is already on the CPU.
    */
   Graph cpu() const;
 
@@ -295,18 +304,20 @@ class Graph {
 
   /**
    * Return a copy of the graph on the GPU specified by `device`.
+   *
+   * The original graph is returned if it is already on the specified device.
    */
   Graph cuda(const Device& device) const;
 
   /**
-   * Get the `GraphData` object for the graph.
+   * Get the `SharedGraph` object for the graph.
    */
-  const Graph::SharedGraph getData() const {
+  const Graph::SharedGraph& getData() const {
     return *sharedGraph_;
   }
 
   /**
-   * Get a modifiable `GraphData` object for the graph.
+   * Get a modifiable `SharedGraph` object for the graph.
    */
   Graph::SharedGraph& getData() {
     return *sharedGraph_;

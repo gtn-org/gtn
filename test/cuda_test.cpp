@@ -23,11 +23,13 @@ TEST_CASE("test graph cuda", "[cuda]") {
     CHECK(!g.isCuda());
     // Moving empty graphs works
     CHECK(equal(g.cuda().cpu(), g));
+    CHECK(equal(g.to(Device::CUDA).cpu(), g));
     g.addNode(true);
     g.addNode(false, true);
     g.addArc(0, 1, 0, 1, 0.5);
     // cpu to cpu is a no-op
     CHECK(g.id() == g.cpu().id());
+    CHECK(g.id() == g.to(Device::CPU).id());
     auto gdev = g.cuda();
     CHECK(gdev.numNodes() == g.numNodes());
     CHECK(gdev.numArcs() == g.numArcs());
