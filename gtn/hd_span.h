@@ -15,6 +15,38 @@ namespace gtn {
 
 namespace detail {
 
+/**
+ * A generic host-device span object which is capable of storing and managing
+ * host or device arrays.
+ *
+ * This object is used to store most underlying `Graph` data for either host or
+ * device graphs. Two reasons to use the HDSpan class over more standard
+ * alternatives (`std::vector` and `thrust::device_vector`) are:
+ * - HDSpan is easy to compile wihtout CUDA
+ * - In order to pass HDSpan by value to device kernels they do not do resource
+ *   management. The caller is responsible for clearing the memory.
+ * Host array can be appended to using `push_back`. Both host and device array
+ * support setting and getting of values at a given index using `mySpan[idx] =
+ * myVal`. (*NB* accessing a host/device array in device/host code does not throw,
+ * and will likely segfault.)
+ *
+ *
+ * Example usage:
+ * ```
+ * // host array of size 10 initialized with 0s
+ * HDSpan<int> hostSpan(10, 0, Device::CPU);
+ *
+ * // uninitialized device array
+ * HDSpan<int> deviceSpan(Device::CUDA);
+ *
+ * // Copies between host and device are managed automatically
+ * deviceSpan = hostSpan;
+ *
+ * // Cleanup
+ * hostSpan.clear();
+ * deviceSpan.clear();
+ * ```
+ */
 template <class T>
 class HDSpan {
 
