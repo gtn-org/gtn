@@ -32,8 +32,6 @@ Graph scalarGraph(float val, Device device);
  * \ingroup creations
  */
 Graph linearGraph(
-    int M, int N, bool calcGrad = true, Device device = Device::CPU);
-
-Graph linearGraph(int M, int N, Device device);
+    int M, int N, Device device = Device::CPU, bool calcGrad = true);
 
 } // namespace gtn

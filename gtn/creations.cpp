@@ -29,19 +29,13 @@ Graph scalarGraph(float val, Device device) {
 
 Graph linearGraph(
     int M, int N,
-    bool calcGrad /* = true */,
-    Device device /* = Device::CPU */) {
+    Device device /* = Device::CPU */,
+    bool calcGrad /* = true */) {
   if (device.isCuda()) {
     return cuda::linearGraph(M, N, calcGrad, device);
   } else {
     return cpu::linearGraph(M, N, calcGrad);
   }
-}
-
-Graph linearGraph(
-    int M, int N,
-    Device device) {
-  return linearGraph(M, N, true, device);
 }
 
 } // namespace gtn
