@@ -8,6 +8,8 @@ set(
 
 set(
   GTN_CUDA_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/creations.cu
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/creations.h
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/compose.cu
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/cuda.h
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/cuda.cu

@@ -5,9 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#define CATCH_CONFIG_MAIN
-
 #include <functional>
+#include <sstream>
 
 #include "catch.hpp"
 
@@ -48,7 +47,7 @@ bool numericalGradCheck(
   return gradPass;
 }
 
-TEST_CASE("Test Autograd", "[autograd]") {
+TEST_CASE("test autograd", "[autograd]") {
   // The graph is not retained by default
   auto g1 = scalarGraph(3.0);
   auto g2 = scalarGraph(3.0);
@@ -85,7 +84,7 @@ TEST_CASE("Test Autograd", "[autograd]") {
   CHECK(g2.grad().item() == 7.0);
 }
 
-TEST_CASE("Test Scalar Ops Grad", "[functions.scalar (grad)]") {
+TEST_CASE("test scalar ops grad", "[autograd]") {
   auto g1 = scalarGraph(3.0);
 
   auto result = negate(g1);
@@ -125,7 +124,7 @@ TEST_CASE("Test Scalar Ops Grad", "[functions.scalar (grad)]") {
   CHECK_THROWS(g2nograd.grad());
 }
 
-TEST_CASE("Test Clone/Project Grad", "[functions.clone (grad)]") {
+TEST_CASE("test clone and project grad", "[autograd]") {
   auto g1 = scalarGraph(3.0);
   auto g2 = scalarGraph(4.0);
 
@@ -145,7 +144,7 @@ TEST_CASE("Test Clone/Project Grad", "[functions.clone (grad)]") {
   CHECK(equal(cloned.grad(), g1.grad()));
 }
 
-TEST_CASE("Test Compose Grad", "[functions.compose (grad)]") {
+TEST_CASE("test compose grad", "[autograd]") {
   Graph first;
   first.addNode(true);
   first.addNode();
@@ -187,7 +186,7 @@ TEST_CASE("Test Compose Grad", "[functions.compose (grad)]") {
   }
 }
 
-TEST_CASE("Test Compose Epsilon Grad", "[functions.compose_epsilon (grad)]") {
+TEST_CASE("test compose epsilon grad", "[autograd]") {
   Graph first;
   first.addNode(true);
   first.addNode();
@@ -224,7 +223,7 @@ TEST_CASE("Test Compose Epsilon Grad", "[functions.compose_epsilon (grad)]") {
   }
 }
 
-TEST_CASE("Test Grad Available", "[functions.isGradAvailable (grad)]") {
+TEST_CASE("test grad available", "[autograd]") {
   {
     Graph g;
     g.addNode(true);
@@ -242,7 +241,7 @@ TEST_CASE("Test Grad Available", "[functions.isGradAvailable (grad)]") {
   }
 }
 
-TEST_CASE("Test forwardScore Grad", "[functions.forwardScore (grad)]") {
+TEST_CASE("test forwardScore grad", "[autograd]") {
   {
     Graph g;
     g.addNode(true);
@@ -379,7 +378,7 @@ TEST_CASE("Test forwardScore Grad", "[functions.forwardScore (grad)]") {
   }
 }
 
-TEST_CASE("Test viterbiScore Grad", "[functions.viterbiScore (grad)]") {
+TEST_CASE("test viterbiScore grad", "[autograd]") {
   auto gradsToVec = [](Graph g) {
     std::vector<float> grads;
     for (auto a = 0; a < g.numArcs(); ++a) {
@@ -454,7 +453,7 @@ TEST_CASE("Test viterbiScore Grad", "[functions.viterbiScore (grad)]") {
   }
 }
 
-TEST_CASE("Test viterbiPath Grad", "[functions.viterbiPath (grad)]") {
+TEST_CASE("Test viterbiPath grad", "[autograd]") {
   auto gradsToVec = [](Graph g) {
     std::vector<float> grads;
     for (auto a = 0; a < g.numArcs(); ++a) {
@@ -491,7 +490,7 @@ TEST_CASE("Test viterbiPath Grad", "[functions.viterbiPath (grad)]") {
   }
 }
 
-TEST_CASE("Test Sample Grad", "[rand.sample (grad)]") {
+TEST_CASE("test sample grad", "[autograd]") {
   Graph g;
   g.addNode(true);
   g.addNode();
@@ -516,7 +515,7 @@ TEST_CASE("Test Sample Grad", "[rand.sample (grad)]") {
   }
 }
 
-TEST_CASE("Test Sum Grad", "[functions.union_ (grad)]") {
+TEST_CASE("test sum grad", "[autograd]") {
   Graph g1;
   g1.addNode(true);
   g1.addNode();
@@ -554,7 +553,7 @@ TEST_CASE("Test Sum Grad", "[functions.union_ (grad)]") {
   CHECK_THROWS(g2.grad());
 }
 
-TEST_CASE("Test Concat Grad", "[functions.concat (grad)]") {
+TEST_CASE("test concat grad", "[autograd]") {
   Graph g1;
   g1.addNode(true);
   g1.addNode();
@@ -592,7 +591,7 @@ TEST_CASE("Test Concat Grad", "[functions.concat (grad)]") {
   CHECK_THROWS(g2.grad());
 }
 
-TEST_CASE("Test Closure Grad", "[functions.closure (grad)]") {
+TEST_CASE("test closure grad", "[autograd]") {
   Graph g1;
   g1.addNode(true);
   g1.addNode(false, true);

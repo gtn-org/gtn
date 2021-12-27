@@ -1,27 +1,13 @@
-#define CATCH_CONFIG_MAIN
 
 #include "catch.hpp"
 
+#include "common.h"
 #include "gtn/hd_span.h"
 #include "gtn/cuda/cuda.h"
 
 using namespace gtn::detail;
 
-// Override globals just for testing
-size_t allocations;
-size_t deallocations;
-
-void* operator new(std::size_t size) {
-  allocations++;
-  return std::malloc(size);
-}
-
-void operator delete(void* p) throw() {
-  deallocations++;
-  free(p);
-}
-
-TEST_CASE("Test HDSpan", "[HDSpan]") {
+TEST_CASE("test hd_span", "[hd_span]") {
   {
     HDSpan<int> s;
     CHECK(s.size() == 0);
@@ -57,6 +43,24 @@ TEST_CASE("Test HDSpan", "[HDSpan]") {
     CHECK(sCopy[0] == 1);
     CHECK(sCopy[1] == 2);
     CHECK(sCopy[2] == 3);
+  }
+
+  // Check resizing works
+  {
+    HDSpan<int> s(2, 1);
+    CHECK(s[0] == 1);
+    CHECK(s[1] == 1);
+
+    s.resize(4, 2);
+    CHECK(s[0] == 1);
+    CHECK(s[1] == 1);
+    CHECK(s[2] == 2);
+    CHECK(s[3] == 2);
+
+    s.resize(3, 3);
+    CHECK(s[0] == 1);
+    CHECK(s[1] == 1);
+    CHECK(s[2] == 2);
   }
 
   {
@@ -98,13 +102,47 @@ TEST_CASE("Test HDSpan", "[HDSpan]") {
   }
 
   {
-    HDSpan<bool> h(2, false, false);
-    CHECK(h[0] == 0.5);
-    CHECK(h[1] == 0.5);
+    HDSpan<bool> h(2, false, Device::CPU);
+    CHECK(h[0] == false);
+    CHECK(h[1] == false);
   }
+
+  // Test equality
+  {
+    HDSpan<int> h1(2);
+    h1[0] = 1;
+    h1[1] = 2;
+
+    HDSpan<int> h2(2);
+    h2[0] = 1;
+    h2[1] = 2;
+    CHECK(h1 == h2);
+  }
+
+  {
+    HDSpan<int> h1(2);
+    h1[0] = 1;
+    h1[1] = 2;
+
+    HDSpan<int> h2(1);
+    h2[0] = 1;
+    CHECK(h1 != h2);
+  }
+
+  {
+    HDSpan<int> h1(2);
+    h1[0] = 1;
+    h1[1] = 2;
+
+    HDSpan<int> h2(2);
+    h2[0] = 1;
+    h2[1] = 3;
+    CHECK(h1 != h2);
+  }
+
 }
 
-TEST_CASE("Test HDSpan CUDA", "[HDSpan.cuda]") {
+TEST_CASE("test hd_span cuda", "[hd_span]") {
   if (!gtn::cuda::isAvailable()) {
     return;
   }
@@ -121,4 +159,72 @@ TEST_CASE("Test HDSpan CUDA", "[HDSpan.cuda]") {
   CHECK(sHost2[0] == 1);
   CHECK(sHost2[1] == 2);
   CHECK(sHost.size() == 2);
+
+  // Test equality
+  {
+    HDSpan<int> h1(2, 1, Device::CUDA);
+
+    HDSpan<int> h2(2, 1, Device::CUDA);
+    CHECK(h1 == h2);
+  }
+
+  {
+    HDSpan<int> h1(2, 1, Device::CUDA);
+
+    HDSpan<int> h2(1, 1, Device::CUDA);
+    CHECK(h1 != h2);
+  }
+
+  {
+    HDSpan<int> h1(2, 2, Device::CUDA);
+
+    HDSpan<int> h2(2, 1, Device::CUDA);
+    CHECK(h1 != h2);
+  }
+}
+
+TEST_CASE("test hd_span operations", "[hd_span]") {
+  {
+    HDSpan<float> a(2, 1.0);
+    HDSpan<float> b(2, 2.0);
+    HDSpan<float> c(2);
+    add(a, b, c);
+    HDSpan<float> expected(2, 3.0);
+    CHECK(c == expected);
+    subtract(a, b, c);
+    expected = HDSpan<float>(2, -1.0);
+    CHECK(c == expected);
+    negate(a, b);
+    CHECK(b == expected);
+  }
+
+  if (!cuda::isAvailable()) {
+    return;
+  }
+
+  {
+    HDSpan<float> a(2, 1.0, Device::CUDA);
+    HDSpan<float> b(2, 2.0, Device::CPU);
+    HDSpan<float> c(2, Device::CPU);
+    CHECK_THROWS(add(a, b, c));
+    CHECK_THROWS(subtract(a, b, c));
+    CHECK_THROWS(negate(a, b));
+  }
+
+  {
+    // *NB* these may segfault if the test fails since catch will try to access
+    // device arrays using []
+    HDSpan<float> a(2, 1.0, Device::CUDA);
+    HDSpan<float> b(2, 2.0, Device::CUDA);
+    HDSpan<float> c(2, Device::CUDA);
+    add(a, b, c);
+    HDSpan<float> expected(2, 3.0, Device::CUDA);
+    CHECK(c == expected);
+    subtract(a, b, c);
+    HDSpan<float> result;
+    expected = HDSpan<float>(2, -1.0, Device::CUDA);
+    CHECK(c == expected);
+    negate(a, b);
+    CHECK(b == expected);
+  }
 }

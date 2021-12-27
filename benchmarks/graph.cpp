@@ -12,26 +12,26 @@
 
 using namespace gtn;
 
-void timeConstructDestruct() {
+void timeConstructDestruct(Device device = Device::CPU) {
   // Hold the reference to the graphs so we don't time destruction.
   std::vector<Graph> graphs;
-  auto linearConstruction = [&graphs]() {
-    graphs.push_back(makeLinear(1000, 1000));
+  auto linearConstruction = [&graphs, device]() {
+    graphs.push_back(linearGraph(1000, 1000, device));
   };
-  TIME(linearConstruction);
+  TIME_DEVICE(linearConstruction, device);
 
   auto linearDestruction = [&graphs]() { graphs.pop_back(); };
-  TIME(linearDestruction);
+  TIME_DEVICE(linearDestruction, device);
 }
 
-void timeCopy() {
-  auto graph = makeLinear(1000, 1000);
+void timeCopy(Device device = Device::CPU) {
+  auto graph = linearGraph(1000, 1000, device);
   auto copy = [&graph]() { auto copied = Graph::deepCopy(graph); };
-  TIME(copy);
+  TIME_DEVICE(copy, device);
 }
 
 void timeTraversal() {
-  auto graph = makeLinear(100000, 100);
+  auto graph = linearGraph(100000, 100);
 
   // A simple iterative function to visit every node in a graph.
   auto traverseForward = [&graph]() {
@@ -80,4 +80,8 @@ int main() {
   timeConstructDestruct();
   timeCopy();
   timeTraversal();
+  if (cuda::isAvailable()) {
+    timeConstructDestruct(Device::CUDA);
+    timeCopy(Device::CUDA);
+  }
 }

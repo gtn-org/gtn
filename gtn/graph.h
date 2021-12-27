@@ -58,44 +58,53 @@ constexpr int epsilon{-1};
 class Graph {
 
  public:
-  struct SharedGraph {
-    SharedGraph(bool isCuda = false, int device = 0) :
-      isCuda(isCuda), device(device) { }
+  struct ArcPtr {
+    int* ptr_;
+    int n_;
+    int operator[](const int idx) const { return ptr_[idx]; };
+    const int* begin() const { return ptr_; };
+    const int* end() const { return ptr_ + n_; };
+    size_t size() const { return n_; };
+  };
 
-    // GPU data and metadata
-    bool isCuda;
-    int device;
+  struct SharedGraph {
+    SharedGraph(Device device = Device::CPU) :
+      device(device) { }
+
+    // Device data
+    Device device;
 
     /// Underlying graph data
     size_t numNodes{0};
     size_t numArcs{0};
 
-    detail::HDSpan<int> startIds{isCuda, device};
-    detail::HDSpan<int> acceptIds{isCuda, device};
-    detail::HDSpan<bool> accept{isCuda, device};
-    detail::HDSpan<bool> start{isCuda, device};
+    detail::HDSpan<int> startIds{device};
+    detail::HDSpan<int> acceptIds{device};
+    detail::HDSpan<bool> accept{device};
+    detail::HDSpan<bool> start{device};
 
     // One value per node - i-th value corresponds to i-th node
     // Last element is the total number of arcs, so that
     // each element and its neighbor forms a range
-    detail::HDSpan<int> inArcOffset{isCuda, device};
-    detail::HDSpan<int> outArcOffset{isCuda, device};
+    // TODO initialize these ?
+    detail::HDSpan<int> inArcOffset{device};
+    detail::HDSpan<int> outArcOffset{device};
 
     // One value per arc
-    detail::HDSpan<int> inArcs{isCuda, device};
-    detail::HDSpan<int> outArcs{isCuda, device};
+    detail::HDSpan<int> inArcs{device};
+    detail::HDSpan<int> outArcs{device};
 
     // One value per arc
     // i-th value corresponds to i-th arc
-    detail::HDSpan<int> ilabels{isCuda, device};
-    detail::HDSpan<int> olabels{isCuda, device};
-    detail::HDSpan<int> srcNodes{isCuda, device};
-    detail::HDSpan<int> dstNodes{isCuda, device};
+    detail::HDSpan<int> ilabels{device};
+    detail::HDSpan<int> olabels{device};
+    detail::HDSpan<int> srcNodes{device};
+    detail::HDSpan<int> dstNodes{device};
 
     // Some optional metadata about the graph
     bool ilabelSorted{false};
     bool olabelSorted{false};
-    bool compiled{isCuda};
+    bool compiled{device.isCuda()};
 
     void free() {
       startIds.clear();
@@ -195,10 +204,9 @@ class Graph {
    * autograd tape see `gtn::clone`.
    *
    * @param src The source graph to copy from.
-   * @param isCuda Whether or not to place the copy on the GPU
-   * @param device The GPU device id if the copy is on the GPU
+   * @param device The device to place the copy on
    */
-  static Graph deepCopy(const Graph& src, bool isCuda, int device = 0);
+  static Graph deepCopy(const Graph& src, Device device);
 
   /**
    * Sort the arcs entering and exiting a node in increasing order by arc in
@@ -238,6 +246,14 @@ class Graph {
     return sharedGraph_->olabelSorted;
   }
 
+  const detail::HDSpan<float>& getWeights() const {
+    return *sharedWeights_;
+  }
+
+  detail::HDSpan<float>& getWeights() {
+    return *sharedWeights_;
+  }
+
   /**
    * Returns an array of weights from a graph. The array will contain
    * `Graph::numArcs()` elements.
@@ -268,7 +284,16 @@ class Graph {
   std::vector<int> labelsToVector(bool ilabel = true);
 
   /**
-   * Return a copy of the graph to the CPU.
+   * Return a copy of the graph on the given device.
+   *
+   * The original graph is returned if it is already on the specified device.
+   */
+  Graph to(const Device& device) const;
+
+  /**
+   * Return a copy of the graph on the CPU.
+   *
+   * The original graph is returned if it is already on the CPU.
    */
   Graph cpu() const;
 
@@ -279,18 +304,20 @@ class Graph {
 
   /**
    * Return a copy of the graph on the GPU specified by `device`.
+   *
+   * The original graph is returned if it is already on the specified device.
    */
-  Graph cuda(int device) const;
+  Graph cuda(const Device& device) const;
 
   /**
-   * Get the `GraphData` object for the graph.
+   * Get the `SharedGraph` object for the graph.
    */
-  const Graph::SharedGraph getData() const {
+  const Graph::SharedGraph& getData() const {
     return *sharedGraph_;
   }
 
   /**
-   * Get a modifiable `GraphData` object for the graph.
+   * Get a modifiable `SharedGraph` object for the graph.
    */
   Graph::SharedGraph& getData() {
     return *sharedGraph_;
@@ -300,13 +327,13 @@ class Graph {
    * Returns true if the graph is on the GPU.
    */
   bool isCuda() const {
-    return sharedGraph_->isCuda;
+    return sharedGraph_->device.isCuda();
   }
 
   /**
    * Get the GPU device the graph is on.
    */
-  int device() const {
+  Device device() const {
     return sharedGraph_->device;
   }
 
@@ -434,13 +461,11 @@ class Graph {
     return sharedGraph_->outArcOffset[i+1] - sharedGraph_->outArcOffset[i];
   }
   /** Get the indices of outgoing arcs from the `i`-th node. */
-  std::vector<int> out(size_t i) const {
+  ArcPtr out(size_t i) const {
     maybeCompile();
     auto start = sharedGraph_->outArcOffset[i];
     auto end = sharedGraph_->outArcOffset[i + 1];
-    return std::vector<int>(
-        sharedGraph_->outArcs.begin() + start,
-        sharedGraph_->outArcs.begin() + end);
+    return ArcPtr{sharedGraph_->outArcs.begin() + start, end - start};
   }
   /** Get the index of the `j`-th outgoing arc from the `i`-th node. */
   int out(size_t i, size_t j) const {
@@ -453,14 +478,11 @@ class Graph {
     return sharedGraph_->inArcOffset[i+1] - sharedGraph_->inArcOffset[i];
   }
   /** Get the indices of incoming arcs to the `i`-th node. */
-  // TODO, this could be faster as an iterator
-  std::vector<int> in(size_t i) const {
+  ArcPtr in(size_t i) const {
     maybeCompile();
     auto start = sharedGraph_->inArcOffset[i];
     auto end = sharedGraph_->inArcOffset[i + 1];
-    return std::vector<int>(
-        sharedGraph_->inArcs.begin() + start,
-        sharedGraph_->inArcs.begin() + end);
+    return ArcPtr{sharedGraph_->inArcs.begin() + start, end - start};
   }
   /** Get the index of the `j`-th incoming arc to the `i`-th node. */
   size_t in(size_t i, size_t j) const {

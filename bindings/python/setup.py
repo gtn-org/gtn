@@ -109,6 +109,7 @@ setup(
     package_dir={"": "src/bindings/python/", "gtn": "src/bindings/python/gtn"},
     ext_modules=[
         CMakeExtension("gtn._graph"),
+        CMakeExtension("gtn._device"),
         CMakeExtension("gtn._autograd"),
         CMakeExtension("gtn.cuda"),
         CMakeExtension("gtn._utils"),

@@ -5,8 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#define CATCH_CONFIG_MAIN
-
 #include "catch.hpp"
 
 #include <vector>
@@ -16,7 +14,7 @@
 
 using namespace gtn;
 
-TEST_CASE("Test Scalar Creation", "[creations.createScalar]") {
+TEST_CASE("test scalar creation", "[creations]") {
   float weight = static_cast<float>(rand());
   auto g = scalarGraph(weight, false);
   CHECK(g.numArcs() == 1);
@@ -27,7 +25,7 @@ TEST_CASE("Test Scalar Creation", "[creations.createScalar]") {
   CHECK(g.calcGrad() == false);
 }
 
-TEST_CASE("Test Linear Creation", "[creations.createLinear]") {
+TEST_CASE("test linear creation", "[creations]") {
   auto rand_float = []() {
     return static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
   };
@@ -49,6 +47,10 @@ TEST_CASE("Test Linear Creation", "[creations.createLinear]") {
       CHECK(g.weight(idx) == arr[idx]);
     }
   }
+  CHECK(g.numStart() == 1);
+  CHECK(g.numAccept() == 1);
+  CHECK(g.isAccept(M));
+  CHECK(g.isStart(0));
 
   CHECK(arr == std::vector<float>(g.weights(), g.weights() + g.numArcs()));
 }

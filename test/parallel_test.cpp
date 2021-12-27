@@ -5,8 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#define CATCH_CONFIG_MAIN
-
 #include <vector>
 
 #include "catch.hpp"
@@ -20,7 +18,7 @@
 
 using namespace gtn;
 
-TEST_CASE("Test ParallelMap One Arg", "[parallel.parallelmap.onearg]") {
+TEST_CASE("test parallel map one arg", "[parallel]") {
   const int B = 4;
 
   std::vector<Graph> inputs;
@@ -40,7 +38,7 @@ TEST_CASE("Test ParallelMap One Arg", "[parallel.parallelmap.onearg]") {
   }
 }
 
-TEST_CASE("Test ParallelMap Two Args", "[parallel.parallelmap.twoarg]") {
+TEST_CASE("test parallel map two args", "[parallel]") {
   const int B = 4;
 
   std::vector<Graph> inputs1;
@@ -62,7 +60,7 @@ TEST_CASE("Test ParallelMap Two Args", "[parallel.parallelmap.twoarg]") {
   }
 }
 
-TEST_CASE("Test ParallelMap Broadcast", "[parallel.parallelmap.broadcast]") {
+TEST_CASE("test parallelmap broadcast", "[parallel]") {
   const int B = 4;
 
   std::vector<Graph> inputs1;
@@ -84,7 +82,7 @@ TEST_CASE("Test ParallelMap Broadcast", "[parallel.parallelmap.broadcast]") {
   }
 }
 
-TEST_CASE("Test ParallelMap Lambda", "[parallel.parallelmap.lambda]") {
+TEST_CASE("test parallel map lambda", "[parallel]") {
   auto function = [](const Graph& g1, const Graph& g2, const Graph& g3) {
     return subtract(add(g1, g2), g3);
   };
@@ -113,9 +111,7 @@ TEST_CASE("Test ParallelMap Lambda", "[parallel.parallelmap.lambda]") {
   }
 }
 
-TEST_CASE(
-    "Test ParallelMap Vector Input",
-    "[parallel.parallelmap.vector_input]") {
+TEST_CASE("test parallel map vector input", "[parallel]") {
   const int B = 4;
 
   std::vector<std::vector<Graph>> inputs(B);
@@ -137,9 +133,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE(
-    "Test ParallelMap Vector Input 2",
-    "[parallel.parallelmap.vector_input2]") {
+TEST_CASE("test parallelmap vector input 2", "[parallel]") {
   const int B = 4;
 
   std::vector<std::vector<Graph>> inputs(B);
@@ -162,9 +156,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE(
-    "Test ParallelMap Other Typed Lambda",
-    "[parallel.parallelmap.other_lambda]") {
+TEST_CASE("test parallel map other typed lambda", "[parallel]") {
   const int B = 4;
 
   auto function = [](int T, int M, std::vector<float> emissionsScore) -> Graph {
@@ -196,7 +188,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE("Test ParallelMap Backward", "[parallel.parallelmap.backward]") {
+TEST_CASE("test parallel map backward", "[parallel]") {
   const int B = 4;
 
   std::vector<Graph> inputs1;
@@ -231,7 +223,7 @@ TEST_CASE("Test ParallelMap Backward", "[parallel.parallelmap.backward]") {
   }
 }
 
-TEST_CASE("Test ParallelMap Throws", "[parallel.parallelmap.onearg]") {
+TEST_CASE("test parallel map throws", "[parallel]") {
   const int B = 4;
 
   std::vector<Graph> inputs;

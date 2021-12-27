@@ -4,6 +4,8 @@ set(
   GTN_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/autograd.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/autograd.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cpu/creations.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cpu/creations.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cpu/compose.h
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cpu/compose.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cpu/functions.h
@@ -12,6 +14,8 @@ set(
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cpu/shortest.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/creations.h
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/creations.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/device.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/device.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/functions.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/functions.h
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/graph.cpp

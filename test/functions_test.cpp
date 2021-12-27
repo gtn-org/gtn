@@ -5,13 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#define CATCH_CONFIG_MAIN
-
 #include <cmath>
 #include <iostream>
+#include <sstream>
 
 #include "catch.hpp"
 
+#include "common.h"
 #include "gtn/creations.h"
 #include "gtn/functions.h"
 #include "gtn/graph.h"
@@ -20,7 +20,7 @@
 
 using namespace gtn;
 
-TEST_CASE("Test Scalar Ops", "[functions.scalars]") {
+TEST_CASE("test scalar ops", "[functions]") {
   auto g1 = scalarGraph(3.0);
 
   auto result = negate(g1);
@@ -35,7 +35,7 @@ TEST_CASE("Test Scalar Ops", "[functions.scalars]") {
   CHECK(result.item() == 1.0);
 }
 
-TEST_CASE("Test Project/clone", "[functions.clone]") {
+TEST_CASE("test project and clone", "[functions]") {
   Graph graph =
       loadTxt(std::stringstream("0 1\n"
                                 "3 4\n"
@@ -81,7 +81,7 @@ TEST_CASE("Test Project/clone", "[functions.clone]") {
   CHECK(equal(projectOutput(graph), outputExpected));
 }
 
-TEST_CASE("Test Composition", "[functions.compose]") {
+TEST_CASE("test composition", "[functions]") {
   {
     // Composing with an empty graph gives an empty graph
     Graph g1;
@@ -140,7 +140,6 @@ TEST_CASE("Test Composition", "[functions.compose]") {
         "1 1 0\n"
         "1 2 1\n");
     Graph expected = loadTxt(in);
-    compose(g1, g2);
     CHECK(isomorphic(compose(g1, g2), expected));
     CHECK(isomorphic(intersect(g1, g2), expected));
 
@@ -235,7 +234,7 @@ TEST_CASE("Test Composition", "[functions.compose]") {
   }
 }
 
-TEST_CASE("Test Forward", "[functions.forwardScore]") {
+TEST_CASE("test forward score", "[functions]") {
   {
     // Check score of empty graph
     Graph g;
@@ -395,7 +394,7 @@ TEST_CASE("Test Forward", "[functions.forwardScore]") {
   }
 }
 
-TEST_CASE("Test Viterbi Score", "[functions.viterbiScore]") {
+TEST_CASE("test viterbi score", "[functions]") {
   {
     // Check score of empty graph
     Graph g;
@@ -459,7 +458,7 @@ TEST_CASE("Test Viterbi Score", "[functions.viterbiScore]") {
   }
 }
 
-TEST_CASE("Test Viterbi Path", "[functions.viterbiPath]") {
+TEST_CASE("test viterbi path", "[functions]") {
   {
     Graph g;
 
@@ -607,7 +606,7 @@ TEST_CASE("Test Viterbi Path", "[functions.viterbiPath]") {
   }
 }
 
-TEST_CASE("Test Epsilon Composition", "[functions.epsilon_compose]") {
+TEST_CASE("test epsilon composition", "[functions]") {
   {
     // Simple test case for output epsilon on first graph
     Graph g1;
@@ -904,7 +903,7 @@ TEST_CASE("Test Epsilon Composition", "[functions.epsilon_compose]") {
   }
 }
 
-TEST_CASE("Test Concat", "[functions.concat]") {
+TEST_CASE("test concat", "[functions]") {
   {
     // Empty string language
     Graph g;
@@ -982,7 +981,7 @@ TEST_CASE("Test Concat", "[functions.concat]") {
   }
 }
 
-TEST_CASE("Test Closure", "[functions.closure]") {
+TEST_CASE("test closure", "[functions]") {
   {
     // Empty graph
     Graph expected;
@@ -1023,7 +1022,7 @@ TEST_CASE("Test Closure", "[functions.closure]") {
   }
 }
 
-TEST_CASE("Test Sum", "[functions.union_]") {
+TEST_CASE("test union", "[functions]") {
   {
     // Empty graph
     CHECK(equal(union_({}), Graph{}));
@@ -1083,7 +1082,7 @@ TEST_CASE("Test Sum", "[functions.union_]") {
   }
 }
 
-TEST_CASE("Test Remove", "[functions.remove]") {
+TEST_CASE("test remove", "[functions]") {
   {
     Graph g(false);
     g.addNode(true);
@@ -1170,7 +1169,7 @@ TEST_CASE("Test Remove", "[functions.remove]") {
     expected.addArc(2, 1, 0);
     expected.addArc(1, 3, 1);
     expected.addArc(0, 3, 1);
-    CHECK(equal(remove(g), expected));
+    CHECK(isomorphic(remove(g), expected));
   }
 
   {

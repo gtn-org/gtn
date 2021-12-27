@@ -58,7 +58,7 @@ struct ExploreState {
   bool followSecond;
 };
 
-inline int div_up(int x, int y) {
+inline int divUp(int x, int y) {
   return (x + y - 1) / y;
 }
 
@@ -91,22 +91,26 @@ bool checkAnyTrue(const HDSpan<bool>& flags) {
 }
 
 void setFalse(HDSpan<bool>& span) {
-  cuda::detail::fill(span.data(), false, span.size());
+  if (span.size() != 0) {
+    cuda::detail::fill(span.data(), false, span.size());
+  }
 }
 
 std::tuple<int*, int> prefixSumScan(const bool* input, size_t numElts) {
   const size_t scanNumElts = numElts + 1;
 
-  HDSpan<int> output(scanNumElts, 0, true);
+  HDSpan<int> output(scanNumElts, 0, Device::CUDA);
   thrust::device_ptr<const bool> iPtr(input);
   thrust::device_ptr<int> oPtr(output.data());
   thrust::exclusive_scan(iPtr, iPtr + numElts, oPtr, (int) 0);
 
-  int sum;
-  bool lastVal;
-  CUDA_CHECK(cudaMemcpy((void*)(&sum), (void* )(&(output[scanNumElts-2])), sizeof(int), cudaMemcpyDeviceToHost));
-  CUDA_CHECK(cudaMemcpy((void*)(&lastVal), (void* )(&(input[scanNumElts-2])), sizeof(bool), cudaMemcpyDeviceToHost));
-  sum += lastVal;
+  int sum = 0;
+  if (numElts > 0) {
+    bool lastVal;
+    CUDA_CHECK(cudaMemcpy((void*)(&sum), (void* )(&(output[scanNumElts-2])), sizeof(int), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy((void*)(&lastVal), (void* )(&(input[scanNumElts-2])), sizeof(bool), cudaMemcpyDeviceToHost));
+    sum += lastVal;
+  }
   CUDA_CHECK(cudaMemcpy((void*)(&(output[scanNumElts-1])),(void*)(&sum), sizeof(int), cudaMemcpyHostToDevice));
 
   return std::make_tuple(output.data(), sum);
@@ -115,7 +119,7 @@ std::tuple<int*, int> prefixSumScan(const bool* input, size_t numElts) {
 std::tuple<int*, int> prefixSumScan(const int* input, size_t numElts) {
   const size_t scanNumElts = numElts + 1;
 
-  HDSpan<int> output(scanNumElts, 0, true);
+  HDSpan<int> output(scanNumElts, 0, Device::CUDA);
   thrust::device_ptr<const int> iPtr(input);
   thrust::device_ptr<int> oPtr(output.data());
   thrust::inclusive_scan(iPtr, iPtr + numElts, oPtr + 1);
@@ -208,7 +212,7 @@ int* calculateArcCrossProductOffset(
   CUDA_CHECK(cudaMalloc((void **)(&(arcCrossProductOffset)), sizeof(int) * numToExploreNodePair));
 
   const int NT = 128;
-  const int gridSize = div_up(numToExploreNodePair, NT);
+  const int gridSize = divUp(numToExploreNodePair, NT);
 
   if (inOrOutArc) {
     calculateArcCrossProductBackwardKernel<<<gridSize, NT, 0, 0>>>(
@@ -628,7 +632,7 @@ void findReachableInit(
     HDSpan<bool> toExplore) {
   int NT = 16; 
   auto blocks = dim3(
-      div_up(g1.acceptIds.size(), NT), div_up(g2.acceptIds.size(), NT));
+      divUp(g1.acceptIds.size(), NT), divUp(g2.acceptIds.size(), NT));
   auto threads = dim3(NT, NT);
   findReachableInitKernel<<<blocks, threads>>>(g1.acceptIds, g2.acceptIds,
     reachable, toExplore, g1.numNodes);
@@ -663,7 +667,7 @@ void secondPassInit(
     HDSpan<bool> newNodes) {
   int NT = 16; 
   auto blocks = dim3(
-      div_up(g1.startIds.size(), NT), div_up(g2.startIds.size(), NT));
+      divUp(g1.startIds.size(), NT), divUp(g2.startIds.size(), NT));
   auto threads = dim3(NT, NT);
   secondPassInitKernel<<<blocks, threads>>>(g1.startIds, g2.startIds,
     reachable, toExplore, newNodes, g1.numNodes);
@@ -687,9 +691,9 @@ void calcGrad(Graph& g, int* arcIds, const Graph& deltas) {
     return;
   }
 
-  HDSpan<float> grad(g.numArcs(), 0, true);
+  HDSpan<float> grad(g.numArcs(), 0.0, Device::CUDA);
   const int NT = 128;
-  const int gridSize = div_up(deltas.numArcs(), NT);
+  const int gridSize = divUp(deltas.numArcs(), NT);
   gradKernel<<<gridSize, NT, 0, 0>>>(
       arcIds, deltas.weights(), grad.data(), deltas.numArcs());
   g.addGrad(grad.data());
@@ -711,9 +715,9 @@ auto boolToIndices(const HDSpan<bool>& vals) {
   std::tie(counts, numTrue) = prefixSumScan(vals.data(), vals.size());
 
   const int NT = 128;
-  const int gridSize = div_up(vals.size(), NT);
+  const int gridSize = divUp(vals.size(), NT);
 
-  HDSpan<int> ids(numTrue, true, vals.device());
+  HDSpan<int> ids(numTrue, Device::CUDA);
   boolToIndicesKernel<<<gridSize, NT, 0, 0>>>(ids, counts, vals, vals.size());
   CUDA_CHECK(cudaFree(counts));
   return ids;
@@ -738,9 +742,8 @@ Graph compose(const Graph& first, const Graph& second) {
   //////////////////////////////////////////////////////////////////////////
   // Step 1: Data parallel findReachable
   //////////////////////////////////////////////////////////////////////////
-  HDSpan<bool> reachable(numAllPairNodes, false, true);
-  HDSpan<bool> toExplore(numAllPairNodes, false, true);
-
+  HDSpan<bool> reachable(numAllPairNodes, false, Device::CUDA);
+  HDSpan<bool> toExplore(numAllPairNodes, false, Device::CUDA);
   findReachableInit(g1, g2, reachable, toExplore); 
 
   // This is the outer control loop that would spawn DP kernels
@@ -765,7 +768,7 @@ Graph compose(const Graph& first, const Graph& second) {
 
     if (totalArcs > 0) {
 
-      const int gridSize = div_up(totalArcs, NT);
+      const int gridSize = divUp(totalArcs, NT);
 
       findReachableKernel<<<gridSize, NT, 0, 0>>>(
           g1, g2, arcCrossProductOffset, exploreIndices,
@@ -783,7 +786,7 @@ Graph compose(const Graph& first, const Graph& second) {
   // in the combined graph
   //////////////////////////////////////////////////////////////////////////
 
-  HDSpan<bool> newNodes(numAllPairNodes, 0, true);
+  HDSpan<bool> newNodes(numAllPairNodes, 0.0, Device::CUDA);
   int* numOutArcs;
   int* numInArcs;
 
@@ -819,7 +822,7 @@ Graph compose(const Graph& first, const Graph& second) {
 
     if (totalArcs > 0) {
 
-      const int gridSize = div_up(totalArcs, NT);
+      const int gridSize = divUp(totalArcs, NT);
 
       computeValidNodeAndArcKernel<<<gridSize, NT, 0, 0>>>(g1, g2,
         arcCrossProductOffset, exploreIndices, reachable, totalArcs,
@@ -850,9 +853,9 @@ Graph compose(const Graph& first, const Graph& second) {
   auto exploreIndices =  boolToIndices(newNodes);
 
   // Generate offsets for nodes and arcs
-  {
+  if (exploreIndices.size() > 0) {
     const int NT = 128;
-    const int gridSize = div_up(exploreIndices.size(), NT);
+    const int gridSize = divUp(exploreIndices.size(), NT);
 
     calculateNumArcsKernel<<<gridSize, NT, 0, 0>>>(exploreIndices,
       numInArcs, numOutArcs, nData.inArcOffset, nData.outArcOffset);
@@ -877,12 +880,7 @@ Graph compose(const Graph& first, const Graph& second) {
   nData.olabels.resize(totalOutArcs);
   nData.srcNodes.resize(totalOutArcs);
   nData.dstNodes.resize(totalOutArcs);
-
-  {
-    float* weights;
-    CUDA_CHECK(cudaMalloc((void **)(&weights), sizeof(float) * totalOutArcs));
-    nGraph.setWeights(weights);
-  }
+  nGraph.getWeights().resize(totalOutArcs);
 
   nData.inArcOffset.copy(inArcOffsetGPU);
   nData.outArcOffset.copy(outArcOffsetGPU);
@@ -908,13 +906,13 @@ Graph compose(const Graph& first, const Graph& second) {
     setFalse(nData.start);
     setFalse(nData.accept);
 
-    const int gridSize = div_up(exploreIndices.size(), NT);
+    const int gridSize = divUp(exploreIndices.size(), NT);
     setStartAndAccept<<<gridSize, NT, 0, 0>>>(g1, g2, exploreIndices, nData);
     nData.startIds = boolToIndices(nData.start);
     nData.acceptIds = boolToIndices(nData.accept);
   }
   if (totalArcs > 0) {
-    const int gridSize = div_up(totalArcs, NT);
+    const int gridSize = divUp(totalArcs, NT);
 
     generateNodeAndArcKernel<<<gridSize, NT, 0, 0>>>(g1, g2,
         first.weights(), second.weights(), arcCrossProductOffset, exploreIndices, newNodes,

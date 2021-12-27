@@ -19,18 +19,28 @@
 
 using namespace gtn;
 
-#define TIME(FUNC)                                           \
-  std::cout << "Timing " << #FUNC << " ...  " << std::flush; \
+#define TIME_DEVICE(FUNC, DEVICE) \
+  { \
+    auto deviceName = device.isCuda() ? "(cuda)" : "(cpu)"; \
+    std::cout << "Timing " << #FUNC << " " << deviceName << " ...  " << std::flush; \
+    std::cout << std::setprecision(5) << timeit(FUNC, true) << " msec" << std::endl; \
+  }
+
+#define TIME(FUNC) \
+  std::cout << "Timing " << #FUNC << " (cpu) ...  " << std::flush; \
   std::cout << std::setprecision(5) << timeit(FUNC) << " msec" << std::endl;
 
 #define milliseconds(x) \
   std::chrono::duration_cast<std::chrono::milliseconds>(x).count()
 #define timeNow() std::chrono::high_resolution_clock::now()
 
-double timeit(std::function<void()> fn) {
+double timeit(std::function<void()> fn, bool isCuda = false) {
   // warmup
   for (int i = 0; i < 5; ++i) {
     fn();
+  }
+  if (isCuda) {
+    cuda::synchronize();
   }
 
   int numIters = 100;
@@ -38,20 +48,11 @@ double timeit(std::function<void()> fn) {
   for (int i = 0; i < numIters; i++) {
     fn();
   }
+  if (isCuda) {
+    cuda::synchronize();
+  }
   auto end = timeNow();
   return milliseconds(end - start) / static_cast<double>(numIters);
-}
-
-Graph makeLinear(int M, int N) {
-  Graph linear;
-  linear.addNode(true);
-  for (int m = 1; m <= M; m++) {
-    linear.addNode(false, m == M);
-    for (int n = 0; n < N; n++) {
-      linear.addArc(m - 1, m, n);
-    }
-  }
-  return linear;
 }
 
 // *NB* num_arcs is assumed to be greater than num_nodes.

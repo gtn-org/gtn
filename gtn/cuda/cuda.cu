@@ -1,13 +1,11 @@
-#include <algorithm>
 #include <sstream>
 #include <thrust/device_ptr.h>
-#include <thrust/fill.h>
+#include <thrust/equal.h>
+#include <thrust/execution_policy.h>
 
 #include "cuda.h"
-#include "gtn/hd_span.h"
 
 namespace gtn {
-
 namespace cuda {
 
 bool isAvailable() {
@@ -30,32 +28,32 @@ void setDevice(int device) {
   CUDA_CHECK(cudaSetDevice(device));
 }
 
+void synchronize() {
+  CUDA_CHECK(cudaDeviceSynchronize());
+}
+
+void synchronize(int device) {
+  detail::DeviceManager dm(device);
+  synchronize();
+}
+
 namespace detail {
 
-void add(const float* a, const float* b, float* out, size_t size, bool isCuda) {
-  if (isCuda) {
-    thrust::device_ptr<const float> aPtr(a);
-    thrust::device_ptr<const float> bPtr(b);
-    thrust::device_ptr<float> outPtr(out);
-    thrust::transform(aPtr, aPtr + size, bPtr, outPtr, thrust::plus<float>());
-  } else {
-    std::transform(a, a + size, b, out, std::plus<>());
-  }
+void negate(const float* in, float* out, size_t size) {
+  thrust::transform(
+      thrust::device, in, in + size, out, thrust::negate<float>());
 }
 
-void fill(bool* dst, bool val, size_t size) {
-  thrust::device_ptr<bool> dPtr(dst);
-  thrust::fill(dPtr, dPtr + size, val);
+void add(const float* a, const float* b, float* out, size_t size) {
+  thrust::device_ptr<const float> aPtr(a);
+  thrust::device_ptr<const float> bPtr(b);
+  thrust::device_ptr<float> outPtr(out);
+  thrust::transform(aPtr, aPtr + size, bPtr, outPtr, thrust::plus<float>());
 }
 
-void fill(int* dst, int val, size_t size) {
-  thrust::device_ptr<int> dPtr(dst);
-  thrust::fill(dPtr, dPtr + size, val);
-}
-
-void fill(float* dst, float val, size_t size) {
-  thrust::device_ptr<float> dPtr(dst);
-  thrust::fill(dPtr, dPtr + size, val);
+void subtract(const float* a, const float* b, float* out, size_t size) {
+  thrust::transform(
+      thrust::device, a, a + size, b, out, thrust::minus<float>());
 }
 
 void copy(void* dst, const void* src, size_t size) {
@@ -80,6 +78,39 @@ void cudaCheck(cudaError_t err, const char* file, int line) {
         << "] CUDA error: " << cudaGetErrorString(err);
     throw std::runtime_error(ess.str());
   }
+}
+
+bool equal(const float* lhs, const float* rhs, size_t size) {
+  thrust::device_ptr<const float> lhsPtr(lhs);
+  thrust::device_ptr<const float> rhsPtr(rhs);
+  return thrust::equal(lhsPtr, lhsPtr + size, rhsPtr);
+}
+
+bool equal(const int* lhs, const int* rhs, size_t size) {
+  thrust::device_ptr<const int> lhsPtr(lhs);
+  thrust::device_ptr<const int> rhsPtr(rhs);
+  return thrust::equal(lhsPtr, lhsPtr + size, rhsPtr);
+}
+
+bool equal(const bool* lhs, const bool* rhs, size_t size) {
+  thrust::device_ptr<const bool> lhsPtr(lhs);
+  thrust::device_ptr<const bool> rhsPtr(rhs);
+  return thrust::equal(lhsPtr, lhsPtr + size, rhsPtr);
+}
+
+void fill(float* dst, float val, size_t size) {
+  thrust::device_ptr<float> ptr(dst);
+  thrust::fill(ptr, ptr + size, val);
+}
+
+void fill(int* dst, int val, size_t size) {
+  thrust::device_ptr<int> ptr(dst);
+  thrust::fill(ptr, ptr + size, val);
+}
+
+void fill(bool* dst, bool val, size_t size) {
+  thrust::device_ptr<bool> ptr(dst);
+  thrust::fill(ptr, ptr + size, val);
 }
 
 } // namespace detail

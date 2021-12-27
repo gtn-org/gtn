@@ -5,8 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#define CATCH_CONFIG_MAIN
-
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -45,7 +43,7 @@ std::string getTmpFileName() {
 }
 } // namespace
 
-TEST_CASE("Test Graph equality", "[utils.equal]") {
+TEST_CASE("test graph equality", "[utils]") {
   {
     // Empty graph is equal to itself
     Graph g1;
@@ -165,7 +163,7 @@ TEST_CASE("Test Graph equality", "[utils.equal]") {
     g2.addArc(0, 1, 1, 1, 3.1);
     g2.addArc(1, 2, 2, 2, 5.1);
     g2.addArc(1, 1, 1, 1, 4.1);
-    CHECK(equal(g1, g2));
+    CHECK_FALSE(equal(g1, g2));
   }
 
   {
@@ -203,7 +201,7 @@ TEST_CASE("Test Graph equality", "[utils.equal]") {
   }
 }
 
-TEST_CASE("Test Graph isomorphic", "[utils.isomorphic]") {
+TEST_CASE("test graph isomorphic", "[utils]") {
   {
     // Empty graphs are isomorphic
     CHECK(isomorphic(Graph{}, Graph{}));
@@ -345,7 +343,7 @@ TEST_CASE("Test Graph isomorphic", "[utils.isomorphic]") {
   }
 }
 
-TEST_CASE("Test loadTxt", "[utils.loadTxt]") {
+TEST_CASE("test load text", "[utils]") {
   {
     Graph g1;
     g1.addNode(true, true);
@@ -431,7 +429,7 @@ TEST_CASE("Test loadTxt", "[utils.loadTxt]") {
   }
 }
 
-TEST_CASE("Test SaveTxt", "[utils.saveTxt]") {
+TEST_CASE("test save text", "[utils]") {
   {
     // Acceptor test
     Graph g;
@@ -512,7 +510,7 @@ TEST_CASE("Test SaveTxt", "[utils.saveTxt]") {
   }
 }
 
-TEST_CASE("Test loadsave", "[utils.load, utils.save]") {
+TEST_CASE("test load and save", "[utils]") {
   auto fn = getTmpFileName();
   {
     Graph g;

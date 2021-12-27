@@ -7,22 +7,6 @@ namespace detail {
   Graph compose(const Graph& g1, const Graph& g2);
 } // namespace detail
 
-Graph negate(const Graph& g) {
-  throw std::logic_error("[cuda::negate] GPU function not implemented.");
-}
-
-Graph add(const Graph& g1, const Graph& g2) {
-  throw std::logic_error("[cuda::add] GPU function not implemented.");
-}
-
-Graph subtract(const Graph& g1, const Graph& g2) {
-  throw std::logic_error("[cuda::subtract] GPU function not implemented.");
-}
-
-Graph clone(const Graph& g, Projection projection /* = Projection::NONE */) {
-  throw std::logic_error("[cuda::clone] GPU function not implemented.");
-}
-
 Graph concat(const std::vector<Graph>& graphs) {
   throw std::logic_error("[cuda::concat] GPU function not implemented.");
 }

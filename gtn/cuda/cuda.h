@@ -1,6 +1,8 @@
 #pragma once
 
-#if defined(CUDA)
+#include <cstddef>
+
+#if defined(_CUDA_)
 #include <cuda.h>
 #include <cuda_runtime.h>
 #define CUDA_CHECK(err) \
@@ -34,6 +36,12 @@ int getDevice();
  */
 void setDevice(int device);
 
+/**
+ * Waits unitl all kernels in all streams are complete.
+ */
+void synchronize();
+void synchronize(int device);
+
 /** @} */
 
 namespace detail {
@@ -52,16 +60,22 @@ class DeviceManager {
   int device_;
 };
 
-void add(const float* a, const float* b, float* out, size_t size, bool isCuda);
-void fill(bool* dst, bool val, size_t size);
-void fill(int* dst, int val, size_t size);
-void fill(float* dst, float val, size_t size);
+void negate(const float* in, float* out, size_t size);
+void add(const float* a, const float* b, float* out, size_t size);
+void subtract(const float* a, const float* b, float* out, size_t size);
 
 void copy(void* dst, const void* src, size_t size);
 void* allocate(size_t size, int device);
 void free(void* ptr);
 
-#if defined(CUDA)
+bool equal(const float* lhs, const float* rhs, size_t size);
+bool equal(const int* lhs, const int* rhs, size_t size);
+bool equal(const bool* lhs, const bool* rhs, size_t size);
+void fill(float* dst, float val, size_t size);
+void fill(int* dst, int val, size_t size);
+void fill(bool* dst, bool val, size_t size);
+
+#if defined(_CUDA_)
 void cudaCheck(cudaError_t err, const char* file, int line);
 #endif
 

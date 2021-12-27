@@ -5,34 +5,20 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#define CATCH_CONFIG_MAIN
-
 #include <algorithm>
 #include <cstdlib>
 #include <thread>
+#include <sstream>
 
 #include "catch.hpp"
 
+#include "common.h"
 #include "gtn/graph.h"
 #include "gtn/utils.h"
 
 using namespace gtn;
 
-// Override globals just for testing
-size_t allocations;
-size_t deallocations;
-
-void* operator new(std::size_t size) {
-  allocations++;
-  return std::malloc(size);
-}
-
-void operator delete(void* p) throw() {
-  deallocations++;
-  free(p);
-}
-
-TEST_CASE("Test Graph", "[graph]") {
+TEST_CASE("test graph", "[graph]") {
   Graph g;
   g.addNode(true);
   g.addNode();
@@ -136,7 +122,7 @@ TEST_CASE("Test Graph", "[graph]") {
   }
 }
 
-TEST_CASE("Test id", "[graph.id]") {
+TEST_CASE("test id", "[graph]") {
   Graph g;
   auto id = g.id();
   g.addNode(true);
@@ -161,7 +147,7 @@ TEST_CASE("Test id", "[graph.id]") {
   CHECK(g4.id() != g.id());
 }
 
-TEST_CASE("Test copy", "[graph.deepCopy]") {
+TEST_CASE("test copy", "[graph]") {
   Graph graph =
       loadTxt(std::stringstream("0 1\n"
                                 "3 4\n"
@@ -188,7 +174,7 @@ TEST_CASE("Test copy", "[graph.deepCopy]") {
   CHECK(copied.olabelSorted());
 }
 
-TEST_CASE("Test arc weight get/set", "[graph.weights]") {
+TEST_CASE("test arc weight get and set", "[graph]") {
   std::vector<float> l = {1.1f, 2.2f, 3.3f, 4.4f};
 
   Graph g;
@@ -206,7 +192,7 @@ TEST_CASE("Test arc weight get/set", "[graph.weights]") {
   CHECK(l == std::vector<float>(g.weights(), g.weights() + g.numArcs()));
 }
 
-TEST_CASE("Test arc label getters", "[graph.labelsToVector]") {
+TEST_CASE("test arc label getters", "[graph]") {
   std::vector<int> l = {0, 1, 2, 3};
 
   Graph g;
@@ -224,7 +210,7 @@ TEST_CASE("Test arc label getters", "[graph.labelsToVector]") {
   CHECK(l == g.labelsToVector(/*ilabel=*/false));
 }
 
-TEST_CASE("Test gradient functionality", "[graph.grad]") {
+TEST_CASE("test gradient functionality", "[graph]") {
   {
     // calcGrad is false
     Graph g(false);
@@ -334,7 +320,7 @@ TEST_CASE("Test gradient functionality", "[graph.grad]") {
   }
 }
 
-TEST_CASE("Test sort", "[graph.arcSort]") {
+TEST_CASE("test sort", "[graph]") {
   // sort on empty graph does nothing
   Graph g;
   g.arcSort();
@@ -386,7 +372,7 @@ TEST_CASE("Test sort", "[graph.arcSort]") {
   CHECK(g.olabelSorted());
 }
 
-TEST_CASE("Test threaded grad", "[graph.threadedGrad]") {
+TEST_CASE("test threaded grad", "[graph]") {
   Graph g;
   g.addNode(true);
   g.addNode(false, true);

@@ -22,13 +22,16 @@ namespace gtn {
  * given weight value and a `epsilon` label.
  * \ingroup creations
  */
-Graph scalarGraph(float val, bool calcGrad = true);
+Graph scalarGraph(float val, bool calcGrad = true, Device device = Device::CPU);
+
+Graph scalarGraph(float val, Device device);
 
 /**
  * Create a linear chain graph with `M + 1` nodes and `N` edges between each node.
  * The labels of the edges between each node are the integers `[0, ..., N - 1]`.
  * \ingroup creations
  */
-Graph linearGraph(int M, int N, bool calcGrad = true);
+Graph linearGraph(
+    int M, int N, Device device = Device::CPU, bool calcGrad = true);
 
 } // namespace gtn

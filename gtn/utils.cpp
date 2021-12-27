@@ -43,37 +43,23 @@ std::vector<std::string> split(const std::string& input) {
 } // namespace
 
 bool equal(const Graph& g1, const Graph& g2) {
+  if (g1.isCuda() != g2.isCuda() && g1.device() != g2.device()) {
+    throw std::invalid_argument(
+        "[gtn::equal] Cannot compare graphs on different devices");
+  }
   if (g1.numNodes() != g2.numNodes() || g1.numStart() != g2.numStart() ||
       g1.numAccept() != g2.numAccept() || g1.numArcs() != g2.numArcs()) {
     return false;
   }
 
-  for (size_t n = 0; n < g1.numNodes(); n++) {
-    if (g1.numIn(n) != g2.numIn(n) || g1.numOut(n) != g2.numOut(n) ||
-        g1.isStart(n) != g2.isStart(n) || g1.isAccept(n) != g2.isAccept(n)) {
-      return false;
-    }
-
-    auto bOut = g2.out(n);
-    for (auto arcG1 : g1.out(n)) {
-      auto it = bOut.begin();
-      for (; it != bOut.end(); it++) {
-        auto arcG2 = *it;
-        if (g1.dstNode(arcG1) == g2.dstNode(arcG2) &&
-            g1.srcNode(arcG1) == g2.srcNode(arcG2) &&
-            g1.ilabel(arcG1) == g2.ilabel(arcG2) &&
-            g1.olabel(arcG1) == g2.olabel(arcG2) &&
-            g1.weight(arcG1) == g2.weight(arcG2)) {
-          break;
-        }
-      }
-      if (it == bOut.end()) {
-        return false;
-      }
-      bOut.erase(it);
-    }
-  }
-  return true;
+  auto& g1Data = g1.getData();
+  auto& g2Data = g2.getData();
+  bool eq = g1Data.ilabels == g2Data.ilabels;
+  eq &= g1Data.olabels == g2Data.olabels;
+  eq &= g1Data.srcNodes == g2Data.srcNodes;
+  eq &= g1Data.dstNodes == g2Data.dstNodes;
+  eq &= g1.getWeights() == g2.getWeights();
+  return eq;
 }
 
 bool isomorphic(
@@ -98,7 +84,7 @@ bool isomorphic(
   }
 
   // Each arc in a has to match with an arc in b
-  auto bOut = g2.out(g2Node);
+  auto bOut = std::list<int>(g2.out(g2Node).begin(), g2.out(g2Node).end());
   for (auto aArc : g1.out(g1Node)) {
     auto it = bOut.begin();
     for (; it != bOut.end(); it++) {

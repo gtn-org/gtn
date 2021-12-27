@@ -12,6 +12,7 @@ function (add_pybind11_extension ext_name)
 endfunction()
 
 add_pybind11_extension(_graph) 
+add_pybind11_extension(_device)
 add_pybind11_extension(_functions)
 add_pybind11_extension(_utils)
 add_pybind11_extension(_creations)

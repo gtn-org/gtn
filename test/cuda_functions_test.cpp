@@ -1,6 +1,5 @@
-#define CATCH_CONFIG_MAIN
-
 #include <cmath>
+#include <sstream>
 
 #include "catch.hpp"
 #include "gtn/gtn.h"
@@ -27,7 +26,21 @@ Graph makeRandomDAG(int num_nodes, int num_arcs) {
   return graph;
 }
 
-TEST_CASE("Test Device Matching", "[cuda.functions]") {
+TEST_CASE("test cuda scalar ops", "[cuda functions]") {
+  auto g1 = scalarGraph(3.0).cuda();
+
+  auto result = negate(g1);
+  CHECK(result.item() == -3.0);
+
+  auto g2 = scalarGraph(4.0).cuda();
+  result = add(g1, g2);
+  CHECK(result.item() == 7.0);
+
+  result = subtract(g2, g1);
+  CHECK(result.item() == 1.0);
+}
+
+TEST_CASE("test device matching", "[cuda functions]") {
   auto g1 = Graph();
   g1.addNode(true);
   g1.addNode(false, true);
@@ -41,11 +54,11 @@ TEST_CASE("Test Device Matching", "[cuda.functions]") {
   CHECK_THROWS(compose(g1, g2.cuda()));
   CHECK_THROWS(compose(g1.cuda(), g2));
   if (cuda::deviceCount() > 1) {
-    CHECK_THROWS(compose(g1.cuda(0), g2.cuda(1)));
+    CHECK_THROWS(compose(g1.cuda(), g2.cuda(Device{Device::CUDA, 1})));
   }
 }
 
-TEST_CASE("Test Cuda Compose", "[cuda.compose]") {
+TEST_CASE("test cuda compose", "[cuda functions]") {
   auto check = [](const Graph& g1, const Graph& g2) {
     auto gOut = compose(g1, g2);
     auto gOutP = compose(g1.cuda(), g2.cuda()).cpu();
@@ -191,7 +204,7 @@ TEST_CASE("Test Cuda Compose", "[cuda.compose]") {
   }
 }
 
-TEST_CASE("Test Cuda Compose Epsilon", "[cuda.epsilon_compose]") {
+TEST_CASE("test cuda compose epsilon", "[cuda functions]") {
 
   auto check = [](const Graph& g1, const Graph& g2) {
     auto gOut = compose(g1, g2);
@@ -407,7 +420,7 @@ TEST_CASE("Test Cuda Compose Epsilon", "[cuda.epsilon_compose]") {
   }
 }
 
-TEST_CASE("Test Cuda Compose Grad", "[cuda.compose_grad]") {
+TEST_CASE("test cuda compose grad", "[cuda functions]") {
   Graph first;
   first.addNode(true);
   first.addNode();
@@ -453,9 +466,7 @@ TEST_CASE("Test Cuda Compose Grad", "[cuda.compose_grad]") {
   }
 }
 
-
-
-TEST_CASE("Test Cuda Compose Epsilon Grad", "[cuda.epsilon_compose_grad]") {
+TEST_CASE("test cuda compose epsilon grad", "[cuda functions]") {
   Graph first;
   first.addNode(true);
   first.addNode();
@@ -504,7 +515,7 @@ Graph makeChainGraph(const std::vector<int>& input) {
   return chain;
 }
 
-TEST_CASE("Test Edit Distance", "[cuda.edit_distance]") {
+TEST_CASE("test edit distance", "[cuda functions]") {
   auto computeEditDistance = [](const int numTokens,
                                 const std::vector<int>& x,
                                 const std::vector<int>& y,
@@ -567,7 +578,7 @@ TEST_CASE("Test Edit Distance", "[cuda.edit_distance]") {
 }
 
 
-TEST_CASE("Test NGrams", "[cuda.ngrams]") {
+TEST_CASE("test ngrams", "[cuda functions]") {
   auto countNgrams = [](const int numTokens,
                         const std::vector<int>& input,
                         const std::vector<int>& ngram,
@@ -621,4 +632,51 @@ TEST_CASE("Test NGrams", "[cuda.ngrams]") {
     auto expected = countNgrams(numToks, input, ngram, false);
     CHECK(count == expected);
   }
+}
+
+TEST_CASE("test cuda project and clone", "[cuda functions]") {
+  Graph graph =
+      loadTxt(std::stringstream("0 1\n"
+                                "3 4\n"
+                                "0 1 0 2 2\n"
+                                "0 2 1 3 1\n"
+                                "1 2 0 1 2\n"
+                                "2 3 0 0 1\n"
+                                "2 3 1 2 1\n"
+                                "1 4 0 1 2\n"
+                                "2 4 1 1 3\n"
+                                "3 4 0 2 2\n"));
+
+  // Test clone
+  graph = graph.cuda();
+  Graph cloned = clone(graph);
+  CHECK(equal(graph.cpu(), cloned.cpu()));
+
+  // Test projecting input
+  Graph inputExpected =
+      loadTxt(std::stringstream("0 1\n"
+                                "3 4\n"
+                                "0 1 0 0 2\n"
+                                "0 2 1 1 1\n"
+                                "1 2 0 0 2\n"
+                                "2 3 0 0 1\n"
+                                "2 3 1 1 1\n"
+                                "1 4 0 0 2\n"
+                                "2 4 1 1 3\n"
+                                "3 4 0 0 2\n"));
+  CHECK(equal(projectInput(graph).cpu(), inputExpected));
+
+  // Test projecting output
+  Graph outputExpected =
+      loadTxt(std::stringstream("0 1\n"
+                                "3 4\n"
+                                "0 1 2 2 2\n"
+                                "0 2 3 3 1\n"
+                                "1 2 1 1 2\n"
+                                "2 3 0 0 1\n"
+                                "2 3 2 2 1\n"
+                                "1 4 1 1 2\n"
+                                "2 4 1 1 3\n"
+                                "3 4 2 2 2\n"));
+  CHECK(equal(projectOutput(graph).cpu(), outputExpected));
 }

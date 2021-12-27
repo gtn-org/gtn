@@ -5,8 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#define CATCH_CONFIG_MAIN
-
 #include <array>
 #include <cmath>
 #include <iostream>
@@ -53,7 +51,7 @@ Graph ctc_graph(std::vector<int> target, int blank) {
   return ctc;
 }
 
-TEST_CASE("Test CTC", "[criterion.ctc]") {
+TEST_CASE("test ctc", "[criterion]") {
   // These test cases are taken from wav2letter: https://fburl.com/msom2e4v
   {
     // Test case 1
@@ -179,7 +177,7 @@ TEST_CASE("Test CTC", "[criterion.ctc]") {
   }
 }
 
-TEST_CASE("Test ASG", "[criterion.asg]") {
+TEST_CASE("test asg", "[criterion]") {
   // This test cases is taken from wav2letter: https://fburl.com/msom2e4v
   const int T = 5, N = 6;
 
@@ -305,7 +303,7 @@ TEST_CASE("Test ASG", "[criterion.asg]") {
   CHECK(allClose);
 }
 
-TEST_CASE("Test ASG Viterbi Path", "[criterion.asg.viterbiPath]") {
+TEST_CASE("test asg viterbi path", "[criterion]") {
   // Test adapted from wav2letter https://tinyurl.com/yc6nxex9
   constexpr int T = 4, N = 3;
 

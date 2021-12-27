@@ -13,21 +13,23 @@
 #include "graph.h"
 #include "cuda/cuda.h"
 
+using namespace gtn::detail;
+
 namespace gtn {
 
 namespace{
 
-auto makeSharedGraph(bool isCuda, int device) {
+auto makeSharedGraph(Device device) {
   return std::shared_ptr<Graph::SharedGraph>{
-    new Graph::SharedGraph{isCuda, device},
+    new Graph::SharedGraph{device},
     [](Graph::SharedGraph* g) {
       g->free();
       delete g;}};
 }
 
-auto makeSharedWeights(bool isCuda, int device) {
+auto makeSharedWeights(Device device) {
   return std::shared_ptr<detail::HDSpan<float>>{
-      new detail::HDSpan<float>{isCuda, device},
+      new detail::HDSpan<float>{device},
       [](detail::HDSpan<float>* w) {
         w->clear();
         delete w;}};
@@ -146,10 +148,6 @@ void Graph::compile() const {
 }
 
 float Graph::item() const {
-  if (isCuda()) {
-    throw std::invalid_argument(
-      "[Graph::item] Can only get scalar from CPU graphs");
-  }
   if (numArcs() > 1) {
     throw std::invalid_argument(
         "[Graph::item] Cannot convert Graph with more than 1 arc to a scalar.");
@@ -158,7 +156,13 @@ float Graph::item() const {
     throw std::invalid_argument(
         "[Graph::item] Cannot convert Graph with no arcs to a scalar.");
   }
-  return weight(0);
+  if (isCuda()) {
+    HDSpan<float> w(1);
+    w = getWeights();
+    return w[0];
+  } else {
+    return weight(0);
+  }
 }
 
 Graph& Graph::grad() {
@@ -192,8 +196,7 @@ void Graph::addGrad(const std::vector<float>& other) {
     } else {
       sharedGrad_->grad = std::make_unique<Graph>(false);
       sharedGrad_->grad->sharedGraph_ = sharedGraph_;
-      sharedGrad_->grad->sharedWeights_ =
-        makeSharedWeights(isCuda(), sharedGraph_->device);
+      sharedGrad_->grad->sharedWeights_ = makeSharedWeights(device());
       sharedGrad_->grad->setWeights(other.data());
     }
   }
@@ -203,20 +206,21 @@ void Graph::addGrad(const float* other) {
   if (calcGrad()) {
     std::lock_guard<std::mutex> lock(sharedGrad_->grad_lock);
     if (isGradAvailable()) {
-      cuda::detail::add(
-          other, grad().weights(), grad().weights(), numArcs(), isCuda());
+      add(
+          HDSpan<float>(numArcs(), const_cast<float*>(other), device()),
+          grad().getWeights(),
+          grad().getWeights());
     } else {
       sharedGrad_->grad = std::make_unique<Graph>(false);
       sharedGrad_->grad->sharedGraph_ = sharedGraph_;
-      sharedGrad_->grad->sharedWeights_ =
-        makeSharedWeights(isCuda(), sharedGraph_->device);
+      sharedGrad_->grad->sharedWeights_ = makeSharedWeights(device());
       sharedGrad_->grad->setWeights(other);
     }
   }
 }
 
 void Graph::addGrad(const Graph& other) {
-  if (other.isCuda() != isCuda() || (isCuda() && device() != other.device())) {
+  if (device() != other.device()) {
     throw std::invalid_argument("[Graph::addGrad] device mismach");
   }
   if (calcGrad() & other.numArcs() != numArcs()) {
@@ -247,13 +251,15 @@ std::uintptr_t Graph::id() {
 }
 
 Graph Graph::deepCopy(const Graph& src) {
-  return deepCopy(src, src.isCuda(), src.sharedGraph_->device);
+  return deepCopy(src, src.device());
 }
 
-Graph Graph::deepCopy(const Graph& src, bool isCuda  = false, int device /* = 0 */) {
-  src.maybeCompile();
+Graph Graph::deepCopy(const Graph& src, Device device_) {
+  if (device_.isCuda()) {
+    src.maybeCompile();
+  }
   Graph out(src.calcGrad());
-  out.sharedGraph_ = makeSharedGraph(isCuda, device);
+  out.sharedGraph_ = makeSharedGraph(device_);
   out.sharedGraph_->numNodes = src.numNodes();
   out.sharedGraph_->numArcs = src.numArcs();
   out.sharedGraph_->compiled = src.sharedGraph_->compiled;
@@ -271,7 +277,7 @@ Graph Graph::deepCopy(const Graph& src, bool isCuda  = false, int device /* = 0 
   out.sharedGraph_->outArcs = src.sharedGraph_->outArcs;
   out.sharedGraph_->ilabelSorted = src.ilabelSorted();
   out.sharedGraph_->olabelSorted = src.olabelSorted();
-  out.sharedWeights_ = makeSharedWeights(isCuda, device);
+  out.sharedWeights_ = makeSharedWeights(device_);
   *(out.sharedWeights_) = *(src.sharedWeights_);
   return out;
 }
@@ -324,27 +330,27 @@ std::vector<int> Graph::labelsToVector(bool ilabel) {
   return out;
 }
 
-Graph Graph::cpu() const {
-  // No-op if already on CPU
-  if (!sharedGraph_->isCuda) {
+Graph Graph::to(const Device& device_) const {
+  if (device_.isCuda() && !cuda::isAvailable()) {
+    std::logic_error("[Graph::to] CUDA not available.");
+  }
+  // No-op if already on device_
+  if (device() == device_) {
     return *this;
   }
-  return deepCopy(*this, false);
+  return deepCopy(*this, device_);
 }
 
-Graph Graph::cuda(int device_) const {
-  if (!cuda::isAvailable()) {
-    std::logic_error("[Graph::cuda] CUDA not available.");
-  }
-  // No-op if already on GPU
-  if (isCuda() && device() == device_) {
-    return *this;
-  }
-  return deepCopy(*this, true, device_);
+Graph Graph::cpu() const {
+  return to(Device::CPU);
+}
+
+Graph Graph::cuda(const Device& device_) const {
+  return to(device_);
 }
 
 Graph Graph::cuda() const {
-  return cuda(cuda::getDevice());
+  return cuda(Device::CUDA);
 }
 
 } // namespace gtn

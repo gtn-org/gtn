@@ -5,10 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#define CATCH_CONFIG_MAIN
-
 #include <cmath>
 #include <iostream>
+#include <sstream>
 
 #include "catch.hpp"
 
@@ -19,7 +18,7 @@
 
 using namespace gtn;
 
-TEST_CASE("Test sample", "[rand.sample]") {
+TEST_CASE("test sample", "[rand]") {
   {
     // Sampling empty paths
     Graph empty;
@@ -79,7 +78,7 @@ TEST_CASE("Test sample", "[rand.sample]") {
   }
 }
 
-TEST_CASE("Test randEquivalent", "[rand.randEquivalent]") {
+TEST_CASE("test rand equivalent", "[rand]") {
   {
     // No accepting paths in the graphs
     Graph g1;
