@@ -16,6 +16,8 @@ set(
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/creations.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/device.h
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/device.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/criterions.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/criterions.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/functions.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/functions.h
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/graph.cpp

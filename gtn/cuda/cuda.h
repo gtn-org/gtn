@@ -60,9 +60,16 @@ class DeviceManager {
   int device_;
 };
 
+<<<<<<< HEAD
 void negate(const float* in, float* out, size_t size);
 void add(const float* a, const float* b, float* out, size_t size);
 void subtract(const float* a, const float* b, float* out, size_t size);
+=======
+void add(const float* a, const float* b, float* out, size_t size, bool isCuda);
+void fill(bool* dst, bool val, size_t size);
+void fill(int* dst, int val, size_t size);
+void fill(float* dst, float val, size_t size);
+>>>>>>> c3b8c95 (use bool)
 
 void copy(void* dst, const void* src, size_t size);
 void* allocate(size_t size, int device);
