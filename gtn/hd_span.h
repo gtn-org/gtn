@@ -56,9 +56,9 @@ class HDSpan {
     T* data;
     if (isCuda()) {
       data = static_cast<T*>(
-          gtn::cuda::detail::allocate(sizeof(T) * space_, device_.index));
+          gtn::cuda::detail::allocate(sizeof(T) * capacity_, device_.index));
     } else {
-      data = new T[space_];
+      data = new T[capacity_];
     }
     gtn::cuda::detail::copy(
       static_cast<void*>(data),
@@ -83,7 +83,7 @@ class HDSpan {
 
   explicit HDSpan() {};
   explicit HDSpan(int size, T* data, Device device)
-    : size_(size), space_(size), data_(data), device_(device) {
+    : size_(size), capacity_(size), data_(data), device_(device) {
   };
   explicit HDSpan(int size, T val, Device device = Device::CPU)
       : device_(device) {
@@ -118,14 +118,14 @@ class HDSpan {
       return *this;
     }
     size_ = other.size();
-    space_ = size_;
+    capacity_ = size_;
     auto newData = allocAndCopy(other.data());
     free();
     data_ = newData;
   };
 
   void resize(size_t size, T val) {
-    // Smaller or same size is a no-op with space_ unchanged.
+    // Smaller or same size is a no-op with capacity_ unchanged.
     auto os = size_;
     resize(size);
     if (size > os) {
@@ -138,12 +138,12 @@ class HDSpan {
   };
 
   void resize(size_t size) {
-    // Smaller or same size is a no-op with space_ unchanged.
+    // Smaller or same size is a no-op with capacity_ unchanged.
     if (size <= size_) {
       size_ = size;
       return;
     }
-    space_ = size;
+    capacity_ = size;
     auto newData = allocAndCopy(data_);
     size_ = size;
     free();
@@ -152,9 +152,9 @@ class HDSpan {
 
   void push_back(T val) {
     assert(!isCuda());
-    if (size_ == space_) {
+    if (size_ == capacity_) {
       auto oldSize_  = size_;
-      resize(space_ ? space_ << 1 : 1);
+      resize(capacity_ ? capacity_ << 1 : 1);
       size_ = oldSize_;
     }
     data_[size_++] = val;
@@ -210,13 +210,13 @@ class HDSpan {
   void clear() {
     free();
     size_ = 0;
-    space_ = 0;
+    capacity_ = 0;
   }
 
  private:
   T* data_{nullptr};
   size_t size_{0};
-  size_t space_{0};
+  size_t capacity_{0};
   Device device_{Device::CPU};
 };
 
@@ -255,6 +255,7 @@ bool operator!=(const HDSpan<T>& lhs, const HDSpan<T>& rhs) {
   return !(lhs == rhs);
 }
 
+/** Negate an HDSpan. Only float arrays are supported. */
 template <typename T>
 void negate(const HDSpan<T>& in, HDSpan<T>& out) {
   if (!isSameDevice(in, out)) {
@@ -270,6 +271,9 @@ void negate(const HDSpan<T>& in, HDSpan<T>& out) {
   }
 }
 
+/** Add one HDSpan to another.
+ *
+ * Only float arrays are supported. */
 template <typename T>
 void add(const HDSpan<T>& lhs, const HDSpan<T>& rhs, HDSpan<T>& out) {
   if (!isSameDevice(lhs, rhs, out)) {
@@ -286,6 +290,9 @@ void add(const HDSpan<T>& lhs, const HDSpan<T>& rhs, HDSpan<T>& out) {
   }
 }
 
+/** Subtract one HDSpan from another.
+ *
+ * Only float arrays are supported. */
 template <typename T>
 void subtract(const HDSpan<T>& lhs, const HDSpan<T>& rhs, HDSpan<T>& out) {
   if (!isSameDevice(lhs, rhs, out)) {

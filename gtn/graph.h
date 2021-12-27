@@ -206,7 +206,7 @@ class Graph {
    * @param src The source graph to copy from.
    * @param device The device to place the copy on
    */
-  static Graph deepCopy(const Graph& src, Device device_);
+  static Graph deepCopy(const Graph& src, Device device);
 
   /**
    * Sort the arcs entering and exiting a node in increasing order by arc in
