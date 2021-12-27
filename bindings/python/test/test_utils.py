@@ -117,7 +117,7 @@ class UtilsTestCase(unittest.TestCase):
         g2.add_arc(0, 1, 1, 1, 3.1)
         g2.add_arc(1, 2, 2, 2, 5.1)
         g2.add_arc(1, 1, 1, 1, 4.1)
-        self.assertTrue(gtn.equal(g1, g2))
+        self.assertFalse(gtn.equal(g1, g2))
 
         # Repeat arcs
         g1 = gtn.Graph()

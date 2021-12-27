@@ -15,16 +15,12 @@
 namespace gtn {
 
 Graph scalarGraph(
-    float val, bool calcGrad /* = true */, Device device /* = Device::CPU */) {
+    float val, Device device /* = Device::CPU */, bool calcGrad /* = true */) {
   if (device.isCuda()) {
     return cuda::scalarGraph(val, calcGrad, device);
   } else {
     return cpu::scalarGraph(val, calcGrad);
   }
-}
-
-Graph scalarGraph(float val, Device device) {
-  return scalarGraph(val, true, device);
 }
 
 Graph linearGraph(

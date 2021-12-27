@@ -16,7 +16,7 @@ using namespace gtn;
 
 TEST_CASE("test scalar creation", "[creations]") {
   float weight = static_cast<float>(rand());
-  auto g = scalarGraph(weight, false);
+  auto g = scalarGraph(weight, Device::CPU, false);
   CHECK(g.numArcs() == 1);
   CHECK(g.label(0) == epsilon);
   CHECK(g.numNodes() == 2);

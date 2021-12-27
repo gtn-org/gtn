@@ -122,6 +122,7 @@ class HDSpan {
     auto newData = allocAndCopy(other.data());
     free();
     data_ = newData;
+    return *this;
   };
 
   void resize(size_t size, T val) {
