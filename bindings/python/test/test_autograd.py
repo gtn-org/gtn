@@ -103,7 +103,7 @@ class AutogradTestCase(unittest.TestCase):
         self.assertEqual(g2.grad().item(), 1.0)
         g1.zero_grad()
 
-        g2nograd = gtn.scalar_graph(4.0, False)
+        g2nograd = gtn.scalar_graph(4.0, gtn.Device(gtn.CPU), False)
 
         result = gtn.add(g1, g2nograd)
         gtn.backward(result)

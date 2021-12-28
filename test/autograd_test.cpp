@@ -116,7 +116,7 @@ TEST_CASE("test scalar ops grad", "[autograd]") {
   CHECK(g2.grad().item() == 1.0f);
   g1.zeroGrad();
 
-  auto g2nograd = scalarGraph(4.0, /* calcGrad = */ false);
+  auto g2nograd = scalarGraph(4.0, Device::CPU, /* calcGrad = */ false);
 
   result = add(g1, g2nograd);
   backward(result);

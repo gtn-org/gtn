@@ -19,7 +19,6 @@ from ._creations import *
 from ._utils import *
 from ._rand import *
 from ._parallel import *
-from ._experimental import *
 from . import cuda
 
 def draw(graph, file_name, isymbols={}, osymbols={}):

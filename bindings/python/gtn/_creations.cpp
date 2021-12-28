@@ -18,19 +18,21 @@ using namespace py::literals;
 PYBIND11_MODULE(_creations, m) {
   m.def(
       "scalar_graph",
-      [](float weight, bool calcGrad) {
+      [](float weight, Device device, bool calcGrad) {
         py::gil_scoped_release release;
-        return scalarGraph(weight, calcGrad);
+        return scalarGraph(weight, device, calcGrad);
       },
       "weight"_a,
+      "device"_a = Device(DeviceType::CPU),
       "calc_grad"_a = true);
 
   m.def(
       "linear_graph",
-      [](int M, int N, bool calcGrad) {
+      [](int M, int N, Device device, bool calcGrad) {
         py::gil_scoped_release release;
-        return linearGraph(M, N, calcGrad);
+        return linearGraph(M, N, device, calcGrad);
       },
       "M"_a, "N"_a,
+      "device"_a = Device(DeviceType::CPU),
       "calc_grad"_a = true);
 }

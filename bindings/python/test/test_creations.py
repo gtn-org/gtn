@@ -13,7 +13,7 @@ import gtn
 class CreationsTestCase(unittest.TestCase):
     def test_scalar_creation(self):
         weight = random.random()
-        g = gtn.scalar_graph(weight, False)
+        g = gtn.scalar_graph(weight, gtn.Device(gtn.CPU), False)
         self.assertEqual(g.num_arcs(), 1)
         self.assertEqual(g.labels_to_list(), [gtn.epsilon])
         self.assertEqual(g.num_nodes(), 2)

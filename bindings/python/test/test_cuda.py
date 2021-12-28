@@ -31,12 +31,13 @@ class CudaTestCase(unittest.TestCase):
       self.assertEqual(gdev.num_nodes(), g.num_nodes())
       self.assertEqual(gdev.num_arcs(), g.num_arcs())
       self.assertTrue(gdev.is_cuda())
-      self.assertRaises(ValueError, gdev.item)
-      self.assertRaises(ValueError, gdev.arc_sort)
+      self.assertEqual(gdev.item(), 0.5)
+      # self.assertRaises(ValueError, gdev.arc_sort)
 
       if gtn.cuda.device_count() > 1:
-        self.assertTrue(gtn.equal(g.cuda(1).cpu(), g))
-        self.assertTrue(gtn.equal(gdev.cuda(1).cpu(), g))
+        gpu1 = gtn.Device(gtn.CUDA, 1) 
+        self.assertTrue(gtn.equal(g.cuda(gpu1).cpu(), g))
+        self.assertTrue(gtn.equal(gdev.cuda(gpu1).cpu(), g))
 
       ghost = gdev.cpu()
       self.assertFalse(ghost.is_cuda())
