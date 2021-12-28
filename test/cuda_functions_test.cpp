@@ -6,6 +6,10 @@
 
 using namespace gtn;
 
+namespace {
+  constexpr float inf = std::numeric_limits<float>::infinity();
+}
+
 // *NB* num_arcs is assumed to be greater than num_nodes.
 Graph makeRandomDAG(int num_nodes, int num_arcs) {
   Graph graph;
@@ -679,4 +683,405 @@ TEST_CASE("test cuda project and clone", "[cuda functions]") {
                                 "2 4 1 1 3\n"
                                 "3 4 2 2 2\n"));
   CHECK(equal(projectOutput(graph).cpu(), outputExpected));
+}
+
+TEST_CASE("test cuda forward score", "[cuda functions]") {
+
+  {
+    // Check score of empty graph
+    Graph g;
+    CHECK(forwardScore(g.cuda()).item() == -inf);
+  }
+
+  {
+    // Handles negative infinity
+    Graph g;
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, -inf);
+    g.addArc(0, 1, 1, 1, -inf);
+    CHECK(forwardScore(g.cuda()).item() == -inf);
+  }
+
+  {
+    // Handles infinity
+    Graph g;
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, inf);
+    g.addArc(0, 1, 1, 1, 0);
+    CHECK(forwardScore(g.cuda()).item() == inf);
+  }
+
+  {
+    // Handles positive and negative infinity
+    Graph g;
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, inf);
+    g.addArc(0, 1, 1, 1, -inf);
+    CHECK(forwardScore(g.cuda()).item() == inf);
+  }
+
+
+  {
+    // Single Node
+    Graph g;
+    g.addNode(true, true);
+    CHECK(forwardScore(g.cuda()).item() == 0.0);
+  }
+
+  {
+    // A simple test case
+    Graph g;
+    g.addNode(true);
+    g.addNode();
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, 1);
+    g.addArc(0, 1, 1, 1, 2);
+    g.addArc(0, 1, 2, 2, 3);
+    g.addArc(1, 2, 0, 0, 1);
+    g.addArc(1, 2, 1, 1, 2);
+    g.addArc(1, 2, 2, 2, 3);
+    CHECK(forwardScore(g.cuda()).item() == Approx(6.8152));
+  }
+
+  {
+    // Handle two start nodes
+    Graph g;
+    g.addNode(true);
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, -5);
+    g.addArc(0, 2, 0, 0, 1);
+    g.addArc(1, 2, 0, 0, 2);
+    float expected = std::log(std::exp(1) + std::exp(-5 + 2) + std::exp(2));
+    CHECK(forwardScore(g.cuda()).item() == Approx(expected));
+  }
+
+  {
+    // Handle two accept nodes
+    Graph g;
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, 2);
+    g.addArc(0, 2, 0, 0, 2);
+    g.addArc(1, 2, 0, 0, 2);
+    float expected = std::log(2 * std::exp(2) + std::exp(4));
+    CHECK(forwardScore(g.cuda()).item() == Approx(expected));
+  }
+
+  {
+    // Handle case where some arcs don't lead to accepting states
+    Graph g;
+    g.addNode(true);
+    g.addNode(false, false);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, 2);
+    g.addArc(0, 2, 0, 0, 2);
+    CHECK(forwardScore(g.cuda()).item() == 2.0);
+  }
+
+  {
+    // A more complex test case
+    std::stringstream in(
+        "0 1\n"
+        "3 4\n"
+        "0 1 0 0 2\n"
+        "0 2 1 1 1\n"
+        "1 2 0 0 2\n"
+        "2 3 0 0 1\n"
+        "2 3 1 1 1\n"
+        "1 4 0 0 2\n"
+        "2 4 1 1 3\n"
+        "3 4 0 0 2\n");
+    Graph g = loadTxt(in);
+    CHECK(forwardScore(g.cuda()).item() == Approx(8.36931));
+  }
+}
+
+TEST_CASE("test cuda forward score grad", "[cuda functions]") {
+  auto checkGrad = [](const Graph& g) {
+    auto gDev = g.cuda();
+    backward(forwardScore(g));
+    backward(forwardScore(gDev));
+    auto gradW = g.grad().weights();
+    auto gradDev = gDev.grad().cpu();
+    auto gradDevW = gradDev.weights();
+    float diff = 0, tot = 0;
+    for (int i = 0; i < g.numArcs(); ++i) {
+      diff += std::pow(gradW[i] - gradDevW[i], 2);
+      tot += std::pow(gradW[i], 2);
+    }
+    return (diff / tot) < 1e-3;
+  };
+
+  {
+    Graph g;
+    g.addNode(true);
+    g.addNode();
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, 1);
+    g.addArc(0, 1, 1, 1, 2);
+    g.addArc(0, 1, 2, 2, 3);
+    g.addArc(1, 2, 0, 0, 1);
+    g.addArc(1, 2, 1, 1, 2);
+    g.addArc(1, 2, 2, 2, 3);
+    CHECK(checkGrad(g));
+  }
+
+  {
+    // Handle two start nodes
+    Graph g;
+    g.addNode(true);
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, -5);
+    g.addArc(0, 2, 0, 0, 1);
+    g.addArc(1, 2, 0, 0, 2);
+    g = g.cuda();
+    backward(forwardScore(g));
+    auto grad = g.grad().cpu();
+    double denom = 1 / (std::exp(-3) + std::exp(1) + std::exp(2));
+    CHECK(grad.weight(0) == Approx(denom * std::exp(-3)));
+    CHECK(grad.weight(1) == Approx(denom * std::exp(1)));
+    CHECK(grad.weight(2) == Approx(denom * (std::exp(-3) + std::exp(2))));
+  }
+
+  {
+    // Handle two accept nodes
+    Graph g;
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, 2);
+    g.addArc(0, 2, 0, 0, 2);
+    g.addArc(1, 2, 0, 0, 2);
+    g = g.cuda();
+    backward(forwardScore(g));
+    auto grad = g.grad().cpu();
+    double denom = 1 / (2 * std::exp(2) + std::exp(4));
+    CHECK(grad.weight(0) == Approx(denom * (std::exp(2) + std::exp(4))));
+    CHECK(grad.weight(1) == Approx(denom * std::exp(2)));
+    CHECK(grad.weight(2) == Approx(denom * std::exp(4)));
+  }
+
+  {
+    // Handle case where some arcs don't lead to accepting states
+    Graph g;
+    g.addNode(true);
+    g.addNode(false, false);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, 2);
+    g.addArc(0, 2, 0, 0, 2);
+    g = g.cuda();
+    backward(forwardScore(g));
+    auto grad = g.grad().cpu();
+    CHECK(grad.weight(0) == Approx(0.0));
+    CHECK(grad.weight(1) == Approx(1.0));
+  }
+
+  {
+    // Handles negative infinity
+    Graph g;
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, -inf);
+    g.addArc(0, 1, 1, 1, -inf);
+    g = g.cuda();
+    backward(forwardScore(g));
+    auto grad = g.grad().cpu();
+    CHECK(std::isnan(grad.weight(0)));
+    CHECK(std::isnan(grad.weight(1)));
+
+    Graph g2;
+    g2.addNode(true);
+    g2.addNode(false, true);
+    g2.addArc(0, 1, 0, 0, -inf);
+    g2.addArc(0, 1, 1, 1, 1.0);
+    g2 = g2.cuda();
+    backward(forwardScore(g2));
+    auto grad2 = g2.grad().cpu();
+    CHECK(grad2.weight(0) == Approx(0.0));
+    CHECK(grad2.weight(1) == Approx(1.0));
+  }
+
+  {
+    // Handles infinity
+    Graph g;
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, inf);
+    g.addArc(0, 1, 1, 1, inf);
+    g = g.cuda();
+    backward(forwardScore(g));
+    auto grad = g.grad().cpu();
+    CHECK(std::isnan(grad.weight(0)));
+    CHECK(std::isnan(grad.weight(1)));
+
+    Graph g2;
+    g2.addNode(true);
+    g2.addNode(false, true);
+    g2.addArc(0, 1, 0, 0, inf);
+    g2.addArc(0, 1, 1, 1, 1.0);
+    g2 = g2.cuda();
+    backward(forwardScore(g2));
+    auto grad2 = g2.grad().cpu();
+    CHECK(std::isnan(grad2.weight(0)));
+    CHECK(std::isnan(grad2.weight(1)));
+  }
+
+  {
+    // A more complex test case
+    std::stringstream in(
+        "0 1\n"
+        "3 4\n"
+        "0 1 0 0 2\n"
+        "0 2 1 1 1\n"
+        "1 2 0 0 2\n"
+        "2 3 0 0 1\n"
+        "2 3 1 1 1\n"
+        "1 4 0 0 2\n"
+        "2 4 1 1 3\n"
+        "3 4 0 0 2\n");
+    Graph g = loadTxt(in);
+    CHECK(checkGrad(g));
+  }
+}
+
+TEST_CASE("test cuda viterbi score", "[cuda functions]") {
+  {
+    // Check score of empty graph
+    Graph g;
+    CHECK(viterbiScore(g.cuda()).item() == -inf);
+  }
+
+  {
+    // A simple test case
+    Graph g;
+    g.addNode(true);
+    g.addNode();
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, 1);
+    g.addArc(0, 1, 1, 1, 2);
+    g.addArc(0, 1, 2, 2, 3);
+    g.addArc(1, 2, 0, 0, 1);
+    g.addArc(1, 2, 1, 1, 2);
+    g.addArc(1, 2, 2, 2, 3);
+    CHECK(viterbiScore(g.cuda()).item() == 6.0f);
+  }
+
+  {
+    // Handle two start nodes
+    Graph g;
+    g.addNode(true);
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, -5);
+    g.addArc(0, 2, 0, 0, 1);
+    g.addArc(1, 2, 0, 0, 2);
+    CHECK(viterbiScore(g.cuda()).item() == 2.0f);
+  }
+
+  {
+    // Handle two accept nodes
+    Graph g;
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, 2);
+    g.addArc(0, 2, 0, 0, 2);
+    g.addArc(1, 2, 0, 0, 2);
+    CHECK(viterbiScore(g.cuda()).item() == 4.0f);
+  }
+
+  {
+    // A more complex test case
+    std::stringstream in(
+        "0 1\n"
+        "3 4\n"
+        "0 1 0 0 2\n"
+        "0 2 1 1 1\n"
+        "1 2 0 0 2\n"
+        "2 3 0 0 1\n"
+        "2 3 1 1 1\n"
+        "1 4 0 0 2\n"
+        "2 4 1 1 3\n"
+        "3 4 0 0 2\n");
+    Graph g = loadTxt(in);
+    CHECK(viterbiScore(g.cuda()).item() == 7.0f);
+  }
+}
+
+TEST_CASE("test cuda viterbi score grad", "[cuda functions]") {
+  auto gradsToVec = [](Graph g) {
+    g = g.cuda();
+    backward(viterbiScore(g));
+    auto grad = g.grad().cpu();
+    std::vector<float> v(grad.numArcs());
+    std::copy(grad.weights(), grad.weights() + grad.numArcs(), v.begin());
+    return v;
+  };
+
+  {
+    Graph g;
+    g.addNode(true);
+    g.addNode();
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, 1);
+    g.addArc(0, 1, 1, 1, 2);
+    g.addArc(0, 1, 2, 2, 3);
+    g.addArc(1, 2, 0, 0, 1);
+    g.addArc(1, 2, 1, 1, 2);
+    g.addArc(1, 2, 2, 2, 3);
+    std::vector<float> expected = {0.0, 0.0, 1.0, 0.0, 0.0, 1.0};
+    CHECK(gradsToVec(g) == expected);
+  }
+
+  {
+    // Handle two start nodes
+    Graph g;
+    g.addNode(true);
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, -5);
+    g.addArc(0, 2, 0, 0, 1);
+    g.addArc(1, 2, 0, 0, 2);
+    std::vector<float> expected = {0.0, 0.0, 1.0};
+    CHECK(gradsToVec(g) == expected);
+  }
+
+  {
+    // Handle two accept nodes
+    Graph g;
+    g.addNode(true);
+    g.addNode(false, true);
+    g.addNode(false, true);
+    g.addArc(0, 1, 0, 0, 2);
+    g.addArc(0, 2, 0, 0, 2);
+    g.addArc(1, 2, 0, 0, 2);
+    std::vector<float> expected = {1.0, 0.0, 1.0};
+    CHECK(gradsToVec(g) == expected);
+  }
+
+  {
+    // A more complex test case
+    std::stringstream in(
+        "0 1\n"
+        "3 4\n"
+        "0 1 0 0 2\n"
+        "0 2 1 1 1\n"
+        "1 2 0 0 2\n"
+        "2 3 0 0 1\n"
+        "2 3 1 1 1\n"
+        "1 4 0 0 2\n"
+        "2 4 1 1 3\n"
+        "3 4 0 0 2\n");
+    Graph g = loadTxt(in);
+    // two possible paths with same viterbi score
+    std::vector<float> expected1 = {1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0};
+    std::vector<float> expected2 = {1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0};
+    CHECK(((gradsToVec(g) == expected1) || (gradsToVec(g) == expected2)));
+  }
 }

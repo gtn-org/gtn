@@ -5,6 +5,7 @@ namespace cuda {
 
 namespace detail {
   Graph compose(const Graph& g1, const Graph& g2);
+  Graph shortestDistance(const Graph& g, bool tropical);
 } // namespace detail
 
 Graph concat(const std::vector<Graph>& graphs) {
@@ -32,11 +33,11 @@ Graph remove(const Graph& g, int ilabel, int olabel) {
 }
 
 Graph forwardScore(const Graph& g) {
-  throw std::logic_error("[cuda::forwardScore] GPU function not implemented.");
+  return cuda::detail::shortestDistance(g, false);
 }
 
 Graph viterbiScore(const Graph& g) {
-  throw std::logic_error("[cuda::viterbiScore] GPU function not implemented.");
+  return cuda::detail::shortestDistance(g, true);
 }
 
 Graph viterbiPath(const Graph& g) {
