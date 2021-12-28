@@ -37,7 +37,7 @@ Graph ctcLoss(
   }
   // gLabel.arcSort(false);
   if (logProbs.isCuda()) {
-    gLabel.cuda(); // TODO: move to the same device id as input
+    gLabel.cuda(logProbs.device()); 
   }
   return negate(forwardScore(intersect(gLabel, logProbs)));
 }
