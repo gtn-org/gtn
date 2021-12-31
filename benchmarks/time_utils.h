@@ -47,9 +47,9 @@ double timeit(std::function<void()> fn, bool isCuda = false) {
   auto start = timeNow();
   for (int i = 0; i < numIters; i++) {
     fn();
-  }
-  if (isCuda) {
-    cuda::synchronize();
+    if (isCuda) {
+      cuda::synchronize();
+    }
   }
   auto end = timeNow();
   return milliseconds(end - start) / static_cast<double>(numIters);
