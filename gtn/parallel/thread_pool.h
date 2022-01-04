@@ -18,7 +18,7 @@
 #include <vector>
 
 namespace gtn {
-
+namespace detail {
 /**
  * A simple thread pool implementation from
  * https://github.com/progschj/ThreadPool for use in benchmarking
@@ -90,4 +90,5 @@ class ThreadPool {
   bool stop;
 };
 
+} // namespace detail
 } // namespace gtn

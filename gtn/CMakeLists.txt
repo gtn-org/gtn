@@ -26,6 +26,8 @@ set(
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/hd_span.h
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/parallel/parallel_map.h
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/parallel/parallel_map.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/parallel/thread_pool.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/parallel/cuda_thread_pool.h
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/rand.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/rand.h
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/utils.cpp

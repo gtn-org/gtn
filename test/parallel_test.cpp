@@ -18,6 +18,57 @@
 
 using namespace gtn;
 
+TEST_CASE("test thread pool", "[parallel]") {
+    gtn::detail::ThreadPool pool(2);
+    std::vector<std::future<int>> results(10);
+    for (int i = 0; i < results.size(); ++i) {
+      results[i] = pool.enqueue([](int idx){ return idx; }, i);
+    }
+    for (int i = 0; i < results.size(); ++i) {
+      CHECK(results[i].get() == i);
+    }
+}
+
+TEST_CASE("test cuda thread pool", "[parallel]") {
+  gtn::detail::CudaThreadPool pool(2);
+  std::vector<std::future<int>> results(10);
+  for (int i = 0; i < results.size(); ++i) {
+    results[i] = pool.enqueue([](int idx){ return idx; }, i);
+  }
+  for (int i = 0; i < results.size(); ++i) {
+    CHECK(results[i].get() == i);
+  }
+
+  // Check main stream synchronizes with thread pool
+  {
+    detail::HDSpan<float> a(1 << 20, 1.0, Device::CUDA);
+    detail::HDSpan<float> b(1 << 20, 0.0, Device::CUDA);
+    detail::HDSpan<float> c(1 << 20, 1000.0, Device::CUDA);
+    for (int i = 0; i < 1000; i++) {
+      detail::add(a, b, b);
+    }
+    std::future<bool> fut = pool.enqueue([&b, &c]() { return b == c; });
+    CHECK(fut.get());
+  }
+
+  // Check thread pool synchronize works
+  {
+    detail::HDSpan<float> a(1 << 20, 1.0, Device::CUDA);
+    detail::HDSpan<float> b(1 << 20, 0.0, Device::CUDA);
+    detail::HDSpan<float> c(1 << 20, 100.0, Device::CUDA);
+    for (int i = 0; i < 200; ++i) {
+      if (i % 2) {
+        pool.enqueue([&a, &b]() { detail::add(a, b, b); });
+      } else {
+        pool.enqueue([]() { return; });
+      }
+    }
+    pool.syncThreads();
+    std::future<bool> fut = pool.enqueue([&b, &c]() { return b == c; });
+    CHECK(fut.get());
+  }
+}
+
 TEST_CASE("test parallel map one arg", "[parallel]") {
   const int B = 4;
 
