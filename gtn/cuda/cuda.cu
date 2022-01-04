@@ -37,23 +37,55 @@ void synchronize(int device) {
   synchronize();
 }
 
+void synchronizeStream() {
+  CUDA_CHECK(cudaStreamSynchronize(0));
+}
+
+Event::Event() {
+  CUDA_CHECK(cudaEventCreateWithFlags(&event_, cudaEventDisableTiming));
+}
+
+Event::~Event() {
+  CUDA_CHECK(cudaEventDestroy(event_));
+}
+
+void Event::record() {
+  CUDA_CHECK(cudaEventRecord(event_));
+}
+
+void Event::synchronize() {
+  CUDA_CHECK(cudaEventSynchronize(event_));
+}
+
+void Event::wait() {
+  CUDA_CHECK(cudaStreamWaitEvent(0, event_));
+}
+
+bool streamComplete() {
+  return cudaStreamQuery(0) == cudaSuccess;
+}
+
 namespace detail {
 
 void negate(const float* in, float* out, size_t size) {
   thrust::transform(
-      thrust::device, in, in + size, out, thrust::negate<float>());
+    thrust::device, in, in + size, out, thrust::negate<float>());
 }
 
 void add(const float* a, const float* b, float* out, size_t size) {
-  thrust::device_ptr<const float> aPtr(a);
-  thrust::device_ptr<const float> bPtr(b);
-  thrust::device_ptr<float> outPtr(out);
-  thrust::transform(aPtr, aPtr + size, bPtr, outPtr, thrust::plus<float>());
+  transform(
+    a, a + size, b, out,
+    [] __device__ (const float lhs, const float rhs) {
+      return lhs + rhs;
+    });
 }
 
 void subtract(const float* a, const float* b, float* out, size_t size) {
-  thrust::transform(
-      thrust::device, a, a + size, b, out, thrust::minus<float>());
+  transform(
+    a, a + size, b, out,
+    [] __device__ (const float lhs, const float rhs) {
+      return lhs - rhs;
+    });
 }
 
 void copy(void* dst, const void* src, size_t size) {
@@ -63,12 +95,12 @@ void copy(void* dst, const void* src, size_t size) {
 void* allocate(size_t size, int device) {
   DeviceManager dm(device);
   void *res;
-  CUDA_CHECK(cudaMalloc(&res, size));
+  CUDA_CHECK(cudaMallocAsync(&res, size, 0));
   return res;
 }
 
 void free(void* ptr) {
-  CUDA_CHECK(cudaFree(ptr));
+  CUDA_CHECK(cudaFreeAsync(ptr, 0));
 }
 
 void cudaCheck(cudaError_t err, const char* file, int line) {

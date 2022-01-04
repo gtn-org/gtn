@@ -1,4 +1,5 @@
 #include "catch.hpp"
+#include <thread>
 
 #include <gtn/gtn.h>
 
@@ -15,6 +16,23 @@ TEST_CASE("test cuda utils", "[cuda]") {
     cuda::setDevice(numDevices - 1);
     device = cuda::getDevice();
     CHECK(device == numDevices - 1);
+
+    // Launch work in main thread stream
+    detail::HDSpan<float> a(1 << 10, 1.0, Device::CUDA);
+    detail::HDSpan<float> b(1 << 10, 0.0, Device::CUDA);
+    detail::HDSpan<float> c(1 << 10, 1000.0, Device::CUDA);
+    auto event = cuda::Event();
+    for (int i = 0; i < 1000; ++i) {
+      add(a, b, b);
+    }
+    event.record();
+
+    // Equality check in a different stream
+    auto eq = std::async([&b, &c, &event](){
+        event.wait();
+        return b == c;
+      });
+    CHECK(eq.get());
 }
 
 TEST_CASE("test graph cuda", "[cuda]") {

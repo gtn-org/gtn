@@ -45,6 +45,10 @@ if (GTN_BUILD_CUDA)
   target_sources(gtn PRIVATE ${GTN_CUDA_SOURCES})
   # TODO, better way to set these arch flags
   target_compile_options(gtn PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-arch=sm_80>)
+  target_compile_options(
+    gtn PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-default-stream=per-thread>)
+  target_compile_options(
+    gtn PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>)
 else()
   include(${CMAKE_SOURCE_DIR}/gtn/cuda/CMakeLists.txt)
   target_sources(gtn PRIVATE ${GTN_NO_CUDA_SOURCES})

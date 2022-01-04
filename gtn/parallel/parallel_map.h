@@ -16,7 +16,6 @@
 #include <utility>
 #include <vector>
 
-#include "gtn/graph.h"
 #include "gtn/parallel/thread_pool.h"
 
 namespace gtn {
