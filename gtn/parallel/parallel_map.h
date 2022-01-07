@@ -16,6 +16,8 @@
 #include <utility>
 #include <vector>
 
+#include "gtn/graph.h"
+#include "gtn/device.h"
 #include "gtn/parallel/thread_pool.h"
 
 namespace gtn {
@@ -135,6 +137,32 @@ struct OutPayload<void> {
   void value() const {}
 };
 
+template <typename T>
+bool anyCuda(const T& g) {
+  return false;
+}
+
+template <>
+bool anyCuda<std::vector<Graph>>(const std::vector<Graph>& graphs) {
+  bool ret = false;
+  for (auto& g : graphs) {
+    ret |= (g.device() == Device::CUDA);
+  }
+  return ret;
+}
+
+// Base case
+template <typename T>
+bool cudaCheck(T isCuda) {
+  return isCuda;
+}
+
+// Find out if any of a variable number of possible inputs are CUDA
+template <typename T, typename... Rest>
+bool cudaCheck(T isCuda, Rest... rest) {
+  return isCuda || cudaCheck(rest...);
+}
+
 } // namespace
 
 /**
@@ -151,6 +179,9 @@ struct OutPayload<void> {
  */
 template <typename FuncType, typename... Args>
 auto parallelMap(FuncType&& function, Args&&... inputs) {
+  // True if any of the inputs are Graphs on a CUDA device
+  bool isCuda = cudaCheck(anyCuda(inputs)...);
+
   // Maximum input size in number of elements
   const auto size = max(getSize(inputs)...);
 
@@ -164,24 +195,32 @@ auto parallelMap(FuncType&& function, Args&&... inputs) {
   std::mutex eMutex;
 
   for (size_t i = 0; i < size; ++i) {
-    futures[i] = threadPool.get().enqueue(
-        [size, i, &function, &eMutex, &eQueue](Args&&... inputs) -> OutType {
-          try {
-            return function(getIdxOrBroadcast(size, i, inputs)...);
-          } catch (...) {
-            std::unique_lock<std::mutex> m(eMutex);
-            eQueue.push(std::current_exception());
-            return OutType();
-          }
-        },
-        std::forward<Args>(inputs)...);
+    auto task = [size, i, &function, &eMutex, &eQueue](
+        Args&&... inputs) -> OutType {
+            try {
+              return function(getIdxOrBroadcast(size, i, inputs)...);
+            } catch (...) {
+              std::unique_lock<std::mutex> m(eMutex);
+              eQueue.push(std::current_exception());
+              return OutType();
+            }
+        };
+    if (isCuda) {
+      futures[i] = threadPool.get().enqueueIndex(
+          i, task, std::forward<Args>(inputs)...);
+    } else {
+      futures[i] = threadPool.get().enqueue(
+          task, std::forward<Args>(inputs)...);
+    }
   }
-
   // Waits until work is done
   auto out = OutPayload<OutType>(futures);
   while (!eQueue.empty()) {
     std::rethrow_exception(eQueue.front());
     eQueue.pop();
+  }
+  if (isCuda) {
+    threadPool.get().syncStreams();
   }
   return out.value();
 }

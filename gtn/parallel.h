@@ -9,4 +9,3 @@
 
 #include "gtn/parallel/parallel_map.h"
 #include "gtn/parallel/thread_pool.h"
-#include "gtn/parallel/cuda_thread_pool.h"
