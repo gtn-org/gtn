@@ -42,7 +42,7 @@ TEST_CASE("test thread pool", "[parallel]") {
   }
 
   // Check main stream synchronizes with thread pool
-  {
+  if (cuda::isAvailable()) {
     detail::HDSpan<float> a(1 << 20, 1.0, Device::CUDA);
     detail::HDSpan<float> b(1 << 20, 0.0, Device::CUDA);
     detail::HDSpan<float> c(1 << 20, 1000.0, Device::CUDA);
@@ -54,7 +54,7 @@ TEST_CASE("test thread pool", "[parallel]") {
   }
 
   // Check thread pool stream synchronization works
-  {
+  if (cuda::isAvailable()) {
     detail::HDSpan<float> a(1 << 20, 1.0, Device::CUDA);
     detail::HDSpan<float> b(1 << 20, 0.0, Device::CUDA);
     detail::HDSpan<float> c(1 << 20, 100.0, Device::CUDA);
@@ -67,7 +67,7 @@ TEST_CASE("test thread pool", "[parallel]") {
   }
 
   // Check that the main stream synchronizes with the worker streams
-  {
+  if (cuda::isAvailable()) {
     detail::HDSpan<float> a(1 << 20, 0.0, Device::CUDA);
     detail::HDSpan<float> b(1 << 20, 100.0, Device::CUDA);
     for (int i = 0; i < 1000; ++i) {
@@ -87,7 +87,6 @@ TEST_CASE("test parallel map one arg", "[parallel]") {
   for (size_t i = 0; i < B; ++i) {
     inputs.push_back(scalarGraph(static_cast<float>(i)));
   }
-
   auto outputs = parallelMap(negate, inputs);
 
   std::vector<Graph> expectedOutputs;
@@ -301,6 +300,9 @@ TEST_CASE("test parallel map throws", "[parallel]") {
 }
 
 TEST_CASE("test parallel map cuda", "[parallel]") {
+  if (!cuda::isAvailable()) {
+    return;
+  }
   {
     const int B = 4;
     std::vector<Graph> inputs;

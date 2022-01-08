@@ -47,8 +47,8 @@ add_library(
   ${GTN_SOURCES}
 )
 
+include(${CMAKE_SOURCE_DIR}/gtn/cuda/CMakeLists.txt)
 if (GTN_BUILD_CUDA)
-  include(${CMAKE_SOURCE_DIR}/gtn/cuda/CMakeLists.txt)
   target_sources(gtn PRIVATE ${GTN_CUDA_SOURCES})
 else()
   target_sources(gtn PRIVATE ${GTN_NO_CUDA_SOURCES})

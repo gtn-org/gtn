@@ -146,7 +146,7 @@ template <>
 bool anyCuda<std::vector<Graph>>(const std::vector<Graph>& graphs) {
   bool ret = false;
   for (auto& g : graphs) {
-    ret |= (g.device() == Device::CUDA);
+    ret |= g.device().isCuda();
   }
   return ret;
 }
@@ -181,7 +181,7 @@ bool cudaCheck(T isCuda, Rest... rest) {
 template <typename FuncType, typename... Args>
 auto parallelMapDevice(
     const Device& device, FuncType&& function, Args&&... inputs) {
-  bool isCuda = (device == Device::CUDA);
+  bool isCuda = device.isCuda();
 
   // Maximum input size in number of elements
   const auto size = max(getSize(inputs)...);
@@ -247,7 +247,7 @@ auto parallelMap(FuncType&& function, Args&&... inputs) {
   // True if any of the inputs are Graphs on a CUDA device
   bool isCuda = cudaCheck(anyCuda(inputs)...);
   return parallelMapDevice(
-      isCuda ? Device::CUDA : Device::CPU,
+      isCuda ? Device(Device::CUDA, 0) : Device::CPU,
       std::forward<FuncType&&>(function),
       std::forward<Args&&>(inputs)...);
 }

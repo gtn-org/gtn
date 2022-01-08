@@ -30,7 +30,9 @@ class ThreadPool {
  public:
   ThreadPool(size_t threads) : stop(false) {
     tasks.resize(threads);
-    events.resize(threads);
+    if (cuda::isAvailable()) {
+      events.resize(threads);
+    }
     for (size_t i = 0; i < threads; ++i)
       workers.emplace_back([this, i] {
         for (;;) {
@@ -42,7 +44,9 @@ class ThreadPool {
                 return stop || !tasks[i].empty() || !sharedTasks.empty();
               });
             if (stop && tasks[i].empty() && sharedTasks.empty()) {
-              cuda::synchronizeStream();
+              if (cuda::isAvailable()) {
+                cuda::synchronizeStream();
+              }
               return;
             }
             if (!tasks[i].empty()) {
@@ -91,7 +95,9 @@ class ThreadPool {
   template <class F, class... Args>
   auto enqueueIndex(int taskNum, F&& f, Args&&... args)
       -> std::future<typename std::result_of<F(Args...)>::type> {
-    cuda::synchronizeStream();
+    if (cuda::isAvailable()) {
+      cuda::synchronizeStream();
+    }
     using return_type = typename std::result_of<F(Args...)>::type;
 
     auto task = std::make_shared<std::packaged_task<return_type()>>(
