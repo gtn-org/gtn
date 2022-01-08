@@ -21,5 +21,8 @@ if (GTN_BUILD_BENCHMARKS)
   build_benchmark(${PROJECT_SOURCE_DIR}/benchmarks/graph.cpp)
   build_benchmark(${PROJECT_SOURCE_DIR}/benchmarks/functions.cpp)
   build_benchmark(${PROJECT_SOURCE_DIR}/benchmarks/parallel.cpp)
+  if (GTN_BUILD_CUDA)
+    build_benchmark(${PROJECT_SOURCE_DIR}/benchmarks/parallel_cuda.cu)
+  endif ()
 endif ()
 

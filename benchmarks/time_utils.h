@@ -21,7 +21,7 @@ using namespace gtn;
 
 #define TIME_DEVICE(FUNC, DEVICE) \
   { \
-    auto deviceName = device.isCuda() ? "(cuda)" : "(cpu)"; \
+    auto deviceName = Device(DEVICE).isCuda() ? "(cuda)" : "(cpu)"; \
     std::cout << "Timing " << #FUNC << " " << deviceName << " ...  " << std::flush; \
     std::cout << std::setprecision(5) << timeit(FUNC, true) << " msec" << std::endl; \
   }

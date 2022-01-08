@@ -12,7 +12,7 @@
 
 using namespace gtn;
 
-void timeParallelCompose(const int B) {
+void timeParallelCompose(const int B, Device device = Device::CPU) {
   const int N1 = 100;
   const int N2 = 50;
   const int A1 = 20;
@@ -29,15 +29,15 @@ void timeParallelCompose(const int B) {
         s.addArc(i, i, j);
       }
     }
-    graphs1.push_back(f);
-    graphs2.push_back(s);
+    graphs1.push_back(f.to(device));
+    graphs2.push_back(s.to(device));
   }
 
   auto composeParallel = [&graphs1, &graphs2]() {
     return parallelMap(compose, graphs1, graphs2);
   };
 
-  TIME(composeParallel);
+  TIME_DEVICE(composeParallel, device);
 
   auto out = parallelMap(compose, graphs1, graphs2);
   std::vector<bool> retainGraph({true});
@@ -46,7 +46,20 @@ void timeParallelCompose(const int B) {
         static_cast<void (*)(Graph, bool)>(&backward), out, retainGraph);
   };
 
-  TIME(backwardParallel);
+  TIME_DEVICE(backwardParallel, device);
+}
+
+void timeParallelClone(const int B, Device device = Device::CPU) {
+  std::vector<Graph> graphs;
+  for (int b = 0; b < B; b++) {
+    graphs.push_back(linearGraph(10, 1000, device));
+  }
+
+  auto cloneParallel = [&graphs]() {
+    parallelMap(projectInput, graphs);
+  };
+
+  TIME_DEVICE(cloneParallel, device);
 }
 
 int main(int argc, char** argv) {
@@ -59,5 +72,12 @@ int main(int argc, char** argv) {
   if (argc > 1) {
     B = std::stoi(argv[1]);
   }
+  std::cout << "Batch size " << B << " with " << detail::getNumViableThreads(B)
+    << " threads." << std::endl;
+  timeParallelClone(B);
   timeParallelCompose(B);
+  if (cuda::isAvailable()) {
+    timeParallelClone(B, Device::CUDA);
+    timeParallelCompose(B, Device::CUDA);
+  }
 }

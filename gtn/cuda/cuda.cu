@@ -61,10 +61,6 @@ void Event::wait() {
   CUDA_CHECK(cudaStreamWaitEvent(0, event_));
 }
 
-bool streamComplete() {
-  return cudaStreamQuery(0) == cudaSuccess;
-}
-
 namespace detail {
 
 void negate(const float* in, float* out, size_t size) {

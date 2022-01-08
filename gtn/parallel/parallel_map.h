@@ -138,7 +138,7 @@ struct OutPayload<void> {
 };
 
 template <typename T>
-bool anyCuda(const T& g) {
+bool anyCuda(const T&) {
   return false;
 }
 
@@ -166,8 +166,9 @@ bool cudaCheck(T isCuda, Rest... rest) {
 } // namespace
 
 /**
- * Executes a function in parallel.
+ * Executes a function in parallel on the given device.
  *
+ * @param[in] device The specified device (e.g. `Device::CUDA`)
  * @param[in] function A function pointer to execute in parallel
  * @param[in] ...inputs variadic arguments of iterable/indexable containers,
  * such as `std::vector`s, i.e. `vector<T1>, vector<T2>,...`. Types must match
@@ -178,9 +179,9 @@ bool cudaCheck(T isCuda, Rest... rest) {
  * `function`. If the given function returns `void`, the return type is `void`.
  */
 template <typename FuncType, typename... Args>
-auto parallelMap(FuncType&& function, Args&&... inputs) {
-  // True if any of the inputs are Graphs on a CUDA device
-  bool isCuda = cudaCheck(anyCuda(inputs)...);
+auto parallelMapDevice(
+    const Device& device, FuncType&& function, Args&&... inputs) {
+  bool isCuda = (device == Device::CUDA);
 
   // Maximum input size in number of elements
   const auto size = max(getSize(inputs)...);
@@ -223,6 +224,32 @@ auto parallelMap(FuncType&& function, Args&&... inputs) {
     threadPool.get().syncStreams();
   }
   return out.value();
+}
+
+/**
+ * Executes a function in parallel.
+ *
+ * @param[in] function A function pointer to execute in parallel
+ * @param[in] ...inputs variadic arguments of iterable/indexable containers,
+ * such as `std::vector`s, i.e. `vector<T1>, vector<T2>,...`. Types must match
+ * the input types of function exactly, i.e. `function` must take arguments
+ * ``T1, T2,...``.
+ *
+ * @return a vector of type `T` where `T` is the type of the output type of
+ * `function`. If the given function returns `void`, the return type is `void`.
+ *
+ * If any of the input types are graphs then the device is inferred from the
+ * device of the graph. The execution will prefer using `Device::CUDA` if the
+ * devices are mixed.
+ */
+template <typename FuncType, typename... Args>
+auto parallelMap(FuncType&& function, Args&&... inputs) {
+  // True if any of the inputs are Graphs on a CUDA device
+  bool isCuda = cudaCheck(anyCuda(inputs)...);
+  return parallelMapDevice(
+      isCuda ? Device::CUDA : Device::CPU,
+      std::forward<FuncType&&>(function),
+      std::forward<Args&&>(inputs)...);
 }
 
 /**
