@@ -69,5 +69,3 @@ def gtn_ctc_func():
 
 
 time_func(gtn_ctc_func, N, "GTN CTC ", iscuda=True)
-
-print(f"GTN took  {(time.perf_counter() - start) * 1000/N} msec")
