@@ -17,6 +17,8 @@ using namespace py::literals;
 
 PYBIND11_MODULE(cuda, m) {
   m.def("is_available", &gtn::cuda::isAvailable);
+  m.def("synchronize", py::overload_cast<> (&gtn::cuda::synchronize));
+  m.def("synchronize", py::overload_cast<int> (&gtn::cuda::synchronize), "device"_a);
   m.def("device_count", &gtn::cuda::deviceCount);
   m.def("get_device", &gtn::cuda::getDevice);
   m.def("set_device", &gtn::cuda::setDevice, "device"_a);
