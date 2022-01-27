@@ -31,7 +31,7 @@ using namespace gtn;
   std::cout << std::setprecision(5) << timeit(FUNC) << " msec" << std::endl;
 
 #define milliseconds(x) \
-  std::chrono::duration_cast<std::chrono::milliseconds>(x).count()
+  (std::chrono::duration_cast<std::chrono::nanoseconds>(x).count() / 1e6)
 #define timeNow() std::chrono::high_resolution_clock::now()
 
 double timeit(std::function<void()> fn, bool isCuda = false) {
@@ -61,9 +61,8 @@ Graph makeRandomDAG(int num_nodes, int num_arcs) {
   graph.addNode(true);
   for (int n = 1; n < num_nodes; n++) {
     graph.addNode(false, n == num_nodes - 1);
-    graph.addArc(n - 1, n, 0); // assure graph is connected
   }
-  for (int i = 0; i < num_arcs - num_nodes + 1; i++) {
+  for (int i = 0; i < num_arcs; i++) {
     // To preserve DAG property, select src then select dst to be
     // greater than source.
     // select from [0, num_nodes-2]:

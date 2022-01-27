@@ -71,7 +71,7 @@ void timeSimpleOps(Device device = Device::CPU) {
 }
 
 void timeForward(Device device = Device::CPU) {
-  auto graph = linearGraph(200, 1000);
+  auto graph = linearGraph(100, 20000);
   std::vector<float> weights(graph.numArcs());
   std::generate(weights.begin(), weights.end(), std::rand);
   graph.setWeights(weights.data());
@@ -88,7 +88,7 @@ void timeForward(Device device = Device::CPU) {
   };
   TIME_DEVICE(forwardScoreLinearBackward, device);
 
-  graph = makeRandomDAG(20000, 200000).to(device);
+  graph = makeRandomDAG(500, 400000).to(device);
   auto forwardScoreRandDAGForward = [&graph]() {
     auto out = forwardScore(graph);
   };
