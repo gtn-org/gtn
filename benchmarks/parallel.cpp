@@ -49,6 +49,20 @@ void timeParallelCompose(const int B, Device device = Device::CPU) {
   TIME_DEVICE(backwardParallel, device);
 }
 
+void timeParallelForward(const int B, Device device = Device::CPU) {
+  std::vector<Graph> graphs;
+  for (int b = 0; b < B; b++) {
+    graphs.push_back(linearGraph(50, 1000, device));
+  }
+
+  auto forwardScoreParallel = [&graphs]() {
+    parallelMap(forwardScore, graphs);
+  };
+
+  TIME_DEVICE(forwardScoreParallel, device);
+}
+
+
 void timeParallelClone(const int B, Device device = Device::CPU) {
   std::vector<Graph> graphs;
   for (int b = 0; b < B; b++) {
@@ -76,8 +90,10 @@ int main(int argc, char** argv) {
     << " threads." << std::endl;
   timeParallelClone(B);
   timeParallelCompose(B);
+  timeParallelForward(B);
   if (cuda::isAvailable()) {
     timeParallelClone(B, Device::CUDA);
     timeParallelCompose(B, Device::CUDA);
+    timeParallelForward(B, Device::CUDA);
   }
 }

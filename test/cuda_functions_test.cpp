@@ -549,7 +549,7 @@ TEST_CASE("test edit distance", "[cuda functions]") {
       edits = edits.cuda();
     }
     auto outG = compose(xG, compose(edits, yG));
-    auto score = viterbiScore(outG.cpu());
+    auto score = viterbiScore(outG);
     return -score.item();
   };
 
@@ -605,7 +605,7 @@ TEST_CASE("test ngrams", "[cuda functions]") {
       ngramG = ngramG.cuda();
     }
     auto outG = compose(inputG, compose(ngramCounter, ngramG));
-    auto score = forwardScore(outG.cpu());
+    auto score = forwardScore(outG);
     return round(std::exp(score.item()));
   };
 
@@ -686,7 +686,6 @@ TEST_CASE("test cuda project and clone", "[cuda functions]") {
 }
 
 TEST_CASE("test cuda forward score", "[cuda functions]") {
-
   {
     // Check score of empty graph
     Graph g;
