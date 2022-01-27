@@ -35,14 +35,31 @@ void synchronize(int device) {
   throw std::logic_error("[cuda::synchronize] CUDA not available.");
 }
 
+void synchronizeStream() {
+  throw std::logic_error("[cuda::synchronizeStream] CUDA not available.");
+}
+
+Event::Event() {
+  throw std::logic_error("[cuda::Event] CUDA not available.");
+}
+
+Event::~Event() { }
+void Event::record() { }
+void Event::synchronize() { }
+void Event::wait() { }
+
 namespace detail {
 
 void add(const float* a, const float* b, float* out, size_t size) {
   throw std::logic_error("[cuda::detail::add] CUDA not available.");
 }
 
-float* ones(size_t size, int device) {
-  throw std::logic_error("[cuda::detail::ones] CUDA not available.");
+void subtract(const float* a, const float* b, float* out, size_t size) {
+  throw std::logic_error("[cuda::detail::subtract] CUDA not available.");
+}
+
+void negate(const float* in, float* out, size_t size) {
+  throw std::logic_error("[cuda::detail::negate] CUDA not available.");
 }
 
 void copy(void* dst, const void* src, size_t size) {
@@ -122,6 +139,14 @@ Graph viterbiScore(const Graph& g) {
 
 Graph viterbiPath(const Graph& g) {
   throw std::logic_error("[cuda::viterbiPath] CUDA not available.");
+}
+
+Graph scalarGraph(float val, bool calcGrad, Device device) {
+  throw std::logic_error("[cuda::scalarGraph] CUDA not available.");
+}
+
+Graph linearGraph(int M, int N, bool calcGrad, Device device) {
+  throw std::logic_error("[cuda::linearGraph] CUDA not available.");
 }
 
 

@@ -139,8 +139,8 @@ class HDSpan {
   };
 
   void resize(size_t size) {
-    // Smaller or same size is a no-op with capacity_ unchanged.
-    if (size <= size_) {
+    // If size is smaller than capacity just update the size.
+    if (size <= capacity_) {
       size_ = size;
       return;
     }
@@ -214,6 +214,9 @@ class HDSpan {
     capacity_ = 0;
   }
 
+  template <typename U>
+  friend void swap(HDSpan<U>& lhs, HDSpan<U>& rhs);
+
  private:
   T* data_{nullptr};
   size_t size_{0};
@@ -235,6 +238,18 @@ bool isSameDevice(const HDSpan<T>& a, const HDSpan<T>& b, const HDSpan<T>& c) {
 }
 
 } // namespace
+
+template <typename T>
+void swap(HDSpan<T>& lhs, HDSpan<T>& rhs) {
+  if (!isSameDevice(lhs, rhs)) {
+    throw std::invalid_argument(
+        "[swap] Objects must be on the same device");
+  }
+  std::swap(lhs.data_, rhs.data_);
+  std::swap(lhs.size_, rhs.size_);
+  std::swap(lhs.capacity_, rhs.capacity_);
+}
+
 
 template <typename T>
 bool operator==(const HDSpan<T>& lhs, const HDSpan<T>& rhs) {

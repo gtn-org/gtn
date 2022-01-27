@@ -18,6 +18,68 @@
 
 using namespace gtn;
 
+TEST_CASE("test thread pool", "[parallel]") {
+  gtn::detail::ThreadPool pool(2);
+
+  {
+    std::vector<std::future<int>> results(10);
+    for (int i = 0; i < results.size(); ++i) {
+      results[i] = pool.enqueue([](int idx){ return idx; }, i);
+    }
+    for (int i = 0; i < results.size(); ++i) {
+      CHECK(results[i].get() == i);
+    }
+  }
+
+  {
+    std::vector<std::future<int>> results(10);
+    for (int i = 0; i < results.size(); ++i) {
+      results[i] = pool.enqueueIndex(i, [](int idx){ return idx; }, i);
+    }
+    for (int i = 0; i < results.size(); ++i) {
+      CHECK(results[i].get() == i);
+    }
+  }
+
+  // Check main stream synchronizes with thread pool
+  if (cuda::isAvailable()) {
+    detail::HDSpan<float> a(1 << 20, 1.0, Device::CUDA);
+    detail::HDSpan<float> b(1 << 20, 0.0, Device::CUDA);
+    detail::HDSpan<float> c(1 << 20, 1000.0, Device::CUDA);
+    for (int i = 0; i < 1000; i++) {
+      detail::add(a, b, b);
+    }
+    std::future<bool> fut = pool.enqueue([&b, &c]() { return b == c; });
+    CHECK(fut.get());
+  }
+
+  // Check thread pool stream synchronization works
+  if (cuda::isAvailable()) {
+    detail::HDSpan<float> a(1 << 20, 1.0, Device::CUDA);
+    detail::HDSpan<float> b(1 << 20, 0.0, Device::CUDA);
+    detail::HDSpan<float> c(1 << 20, 100.0, Device::CUDA);
+    for (int i = 0; i < 100; ++i) {
+      pool.enqueueIndex(0, [&a, &b]() { detail::add(a, b, b); });
+    }
+    pool.syncStreams();
+    std::future<bool> fut = pool.enqueueIndex(1, [&b, &c]() { return b == c; });
+    CHECK(fut.get());
+  }
+
+  // Check that the main stream synchronizes with the worker streams
+  if (cuda::isAvailable()) {
+    detail::HDSpan<float> a(1 << 20, 0.0, Device::CUDA);
+    detail::HDSpan<float> b(1 << 20, 100.0, Device::CUDA);
+    for (int i = 0; i < 1000; ++i) {
+      pool.enqueueIndex(0, [&]() { a = b;});
+    }
+    pool.syncStreams();
+    detail::add(b, b, b);
+    detail::HDSpan<float> expected(1 << 20, 100, Device::CUDA);
+    CHECK((a == expected));
+  }
+}
+
 TEST_CASE("test parallel map one arg", "[parallel]") {
   const int B = 4;
 
@@ -25,7 +87,6 @@ TEST_CASE("test parallel map one arg", "[parallel]") {
   for (size_t i = 0; i < B; ++i) {
     inputs.push_back(scalarGraph(static_cast<float>(i)));
   }
-
   auto outputs = parallelMap(negate, inputs);
 
   std::vector<Graph> expectedOutputs;
@@ -236,4 +297,67 @@ TEST_CASE("test parallel map throws", "[parallel]") {
       parallelMap(negate, inputs),
       std::logic_error,
       Catch::Message("[gtn::negate] input must have only one arc"));
+}
+
+TEST_CASE("test parallel map cuda", "[parallel]") {
+  if (!cuda::isAvailable()) {
+    return;
+  }
+  {
+    const int B = 4;
+    std::vector<Graph> inputs;
+    std::vector<Graph> expectedOutputs;
+    for (size_t i = 0; i < B; ++i) {
+      inputs.push_back(scalarGraph(static_cast<float>(i), Device::CUDA));
+      expectedOutputs.push_back(negate(inputs[i]));
+    }
+
+    auto outputs = parallelMap(negate, inputs);
+
+    for (size_t i = 0; i < B; ++i) {
+      CHECK(equal(outputs[i], expectedOutputs[i]));
+    }
+  }
+
+  {
+    std::vector<Graph> inputs;
+    inputs.push_back(linearGraph(100, 10000, Device::CUDA));
+    inputs.push_back(linearGraph(1, 1, Device::CUDA));
+    for (int i = 0; i < 100; ++i) {
+      parallelMap(projectInput, inputs);
+    }
+    std::vector<Graph> inputs1;
+    std::vector<Graph> inputs2;
+    std::vector<Graph> expectedOutputs;
+    inputs1.push_back(scalarGraph(2.0, Device::CUDA));
+    inputs1.push_back(scalarGraph(1.0, Device::CUDA));
+    inputs2.push_back(scalarGraph(0.0, Device::CUDA));
+    inputs2.push_back(scalarGraph(0.0, Device::CUDA));
+    expectedOutputs.push_back(scalarGraph(1.0, Device::CUDA));
+    expectedOutputs.push_back(scalarGraph(2.0, Device::CUDA));
+    auto outputs = parallelMap(add, inputs1, inputs2);
+    std::swap(outputs[0], outputs[1]);
+    auto results = parallelMap(equal, outputs, expectedOutputs);
+    CHECK(results == std::vector<bool>(2, true));
+  }
+
+  // Changing the size of the batch shouldn't cause synchronization issues
+  {
+    std::vector<Graph> inputs1;
+    std::vector<Graph> inputs2;
+    inputs1.push_back(scalarGraph(1.0, Device::CUDA));
+    inputs1.push_back(scalarGraph(1.0, Device::CUDA));
+    inputs2.push_back(scalarGraph(0.0, Device::CUDA));
+    inputs2.push_back(scalarGraph(0.0, Device::CUDA));
+    for (int i = 0; i < 100; i++) {
+      inputs2 = parallelMap(add, inputs1, inputs2);
+    }
+    for (int i = 0; i < 10; i++) {
+      inputs1.push_back(scalarGraph(0.0, Device::CUDA));
+      inputs2.push_back(scalarGraph(0.0, Device::CUDA));
+    }
+    auto results = parallelMap(add, inputs1, inputs2);
+    CHECK(equal(results[0], scalarGraph(101.0, Device::CUDA)));
+    CHECK(equal(results[1], scalarGraph(101.0, Device::CUDA)));
+  }
 }

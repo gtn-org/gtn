@@ -140,6 +140,14 @@ TEST_CASE("test hd_span", "[hd_span]") {
     CHECK(h1 != h2);
   }
 
+  // Test swap
+  {
+    HDSpan<int> h1(2, 1);
+    HDSpan<int> h2(3, 2);
+    swap(h1, h2);
+    CHECK(h1 == HDSpan<int>(3, 2));
+    CHECK(h2 == HDSpan<int>(2, 1));
+  }
 }
 
 TEST_CASE("test hd_span cuda", "[hd_span]") {

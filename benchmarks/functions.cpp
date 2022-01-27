@@ -70,33 +70,35 @@ void timeSimpleOps(Device device = Device::CPU) {
   TIME(concatBackward);
 }
 
-void timeForward() {
-  auto graph = linearGraph(1000, 1000);
+void timeForward(Device device = Device::CPU) {
+  auto graph = linearGraph(100, 20000);
   std::vector<float> weights(graph.numArcs());
   std::generate(weights.begin(), weights.end(), std::rand);
   graph.setWeights(weights.data());
+  graph = graph.to(device);
+
   auto forwardScoreLinearForward = [&graph]() {
     auto out = forwardScore(graph);
   };
-  TIME(forwardScoreLinearForward);
+  TIME_DEVICE(forwardScoreLinearForward, device);
 
   auto forwardScoreLinearBackward = [&graph, out = forwardScore(graph)] {
     graph.zeroGrad();
     backward(out, true);
   };
-  TIME(forwardScoreLinearBackward);
+  TIME_DEVICE(forwardScoreLinearBackward, device);
 
-  graph = makeRandomDAG(20000, 200000);
+  graph = makeRandomDAG(500, 400000).to(device);
   auto forwardScoreRandDAGForward = [&graph]() {
     auto out = forwardScore(graph);
   };
-  TIME(forwardScoreRandDAGForward);
+  TIME_DEVICE(forwardScoreRandDAGForward, device);
 
   auto forwardScoreRandDAGBackward = [&graph, out = forwardScore(graph)] {
     graph.zeroGrad();
     backward(out, true);
   };
-  TIME(forwardScoreRandDAGBackward);
+  TIME_DEVICE(forwardScoreRandDAGBackward, device);
 }
 
 void timeCompose(Device device = Device::CPU) {
@@ -144,6 +146,7 @@ int main() {
   timeCompose();
   if (cuda::isAvailable()) {
     timeSimpleOps(Device::CUDA);
+    timeForward(Device::CUDA);
     timeCompose(Device::CUDA);
   }
 }

@@ -15,4 +15,5 @@ set(
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/cuda.cu
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/functions.h
   ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/functions.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/gtn/cuda/shortest.cu
 )
