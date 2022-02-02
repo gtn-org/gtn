@@ -241,7 +241,7 @@ TEST_CASE("test grad available", "[autograd]") {
   }
 }
 
-TEST_CASE("test forwardScore grad", "[autograd]") {
+TEST_CASE("test forward score grad", "[autograd]") {
   {
     Graph g;
     g.addNode(true);
@@ -299,15 +299,47 @@ TEST_CASE("test forwardScore grad", "[autograd]") {
     // Handle case where some arcs don't lead to accepting states
     Graph g;
     g.addNode(true);
-    g.addNode(false, false);
+    g.addNode();
     g.addNode(false, true);
     g.addArc(0, 1, 0, 0, 2);
     g.addArc(0, 2, 0, 0, 2);
     backward(forwardScore(g));
     CHECK(numericalGradCheck(forwardScore, g, 1e-3, 1e-3));
     auto& grad = g.grad();
-    CHECK(grad.weight(0) == Approx(0.0));
+    CHECK(grad.weight(0) == 0.0);
     CHECK(grad.weight(1) == Approx(1.0));
+  }
+
+  {
+    // Non-start node with no incoming arcs
+    Graph g;
+    g.addNode(true);
+    g.addNode();
+    g.addNode(false, true);
+    g.addArc(0, 2, 0, 0, 1.0);
+    g.addArc(1, 2, 0);
+    backward(forwardScore(g));
+    auto& grad = g.grad();
+    CHECK(grad.weight(0) == Approx(1.0));
+    CHECK(grad.weight(1) == 0.0);
+  }
+
+  {
+    // Disconnected graph
+    Graph g;
+    g.addNode(true);
+    g.addNode();
+    g.addNode();
+    g.addNode();
+    g.addNode(false, true);
+    g.addArc(0, 1, 0);
+    g.addArc(2, 3, 0);
+    g.addArc(3, 4, 0);
+    backward(forwardScore(g));
+    auto& grad = g.grad();
+    CHECK(grad.weight(0) == 0.0);
+    CHECK(grad.weight(1) == 0.0);
+    CHECK(grad.weight(2) == 0.0);
   }
 
   const float inf = std::numeric_limits<float>::infinity();
@@ -332,7 +364,7 @@ TEST_CASE("test forwardScore grad", "[autograd]") {
     backward(forwardScore(g2));
 
     auto& grad2 = g2.grad();
-    CHECK(grad2.weight(0) == Approx(0.0));
+    CHECK(grad2.weight(0) == 0.0);
     CHECK(grad2.weight(1) == Approx(1.0));
   }
 
@@ -378,7 +410,7 @@ TEST_CASE("test forwardScore grad", "[autograd]") {
   }
 }
 
-TEST_CASE("test viterbiScore grad", "[autograd]") {
+TEST_CASE("test viterbi score grad", "[autograd]") {
   auto gradsToVec = [](Graph g) {
     std::vector<float> grads;
     for (auto a = 0; a < g.numArcs(); ++a) {

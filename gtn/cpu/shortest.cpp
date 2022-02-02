@@ -44,15 +44,17 @@ void shortestDistanceGrad(
   std::vector<float> arcGrads(g.numArcs(), 0.0);
   for (auto n = 0; n < g.numNodes(); ++n) {
     degrees[n] = g.numOut(n);
+    if (g.numOut(n) == 0) {
+      computed.push(n);
+    }
   }
   float curScore = 0.0;
   float denom = tropical ? 0.0f : std::exp(output - maxScoresCache.back());
   for (auto n : g.accept()) {
-    if (g.numOut(n) == 0) {
-      computed.push(n);
-    }
     if (tropical) {
       curScore = (n == maxArcIdxCache.back()) ? 1.0f : 0.0f;
+    } else if (maxScoresCache.back() == kNegInf) {
+      curScore = 0.0f;
     } else {
       curScore = std::exp(nodeScores[n] - maxScoresCache.back()) / denom;
     }
@@ -67,6 +69,8 @@ void shortestDistanceGrad(
       auto un = g.srcNode(a);
       if (tropical) {
         curScore = (a == maxArcIdxCache[n]) ? nodeGrads[n] : 0.0f;
+      } else if (maxScoresCache[n] == kNegInf) {
+        curScore = 0.0f;
       } else {
         curScore = nodeGrads[n] *
             std::exp(nodeScores[un] + g.weight(a) - maxScoresCache[n]) / denom;
@@ -92,8 +96,6 @@ Graph shortestDistance(const Graph& g, bool tropical /* = false */) {
   std::vector<size_t> degrees(g.numNodes());
   for (size_t n = 0; n < g.numNodes(); ++n) {
     degrees[n] = g.numIn(n);
-  }
-  for (auto n : g.start()) {
     if (g.numIn(n) == 0) {
       computed.push(n);
     }

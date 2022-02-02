@@ -235,10 +235,13 @@ TEST_CASE("test composition", "[functions]") {
 }
 
 TEST_CASE("test forward score", "[functions]") {
+
+  const float inf = std::numeric_limits<float>::infinity();
+
   {
     // Check score of empty graph
     Graph g;
-    CHECK(forwardScore(g).item() == -std::numeric_limits<float>::infinity());
+    CHECK(forwardScore(g).item() == -inf);
   }
 
   {
@@ -286,17 +289,29 @@ TEST_CASE("test forward score", "[functions]") {
   }
 
   {
-    // Throws if a non-start node has no incoming arcs
+    // Non-start node with no incoming arcs
     Graph g;
     g.addNode(true);
     g.addNode();
     g.addNode(false, true);
-    g.addArc(0, 2, 0);
     g.addArc(1, 2, 0);
-    CHECK_THROWS(forwardScore(g));
+    CHECK(forwardScore(g).item() == -inf);
+    g.addArc(0, 2, 0, 0, 1.0);
+    CHECK(forwardScore(g).item() == Approx(1.0));
   }
 
-  const float inf = std::numeric_limits<float>::infinity();
+  {
+    // Disconnected graph
+    Graph g;
+    g.addNode(true);
+    g.addNode();
+    g.addNode();
+    g.addNode(false, true);
+    g.addArc(0, 1, 0);
+    g.addArc(2, 3, 0);
+    CHECK(forwardScore(g).item() == -inf);
+  }
+
   {
     // Handles negative infinity
     Graph g;
