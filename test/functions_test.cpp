@@ -245,50 +245,6 @@ TEST_CASE("test forward score", "[functions]") {
   }
 
   {
-    // Throws on self-loops
-    Graph g;
-    g.addNode(true, true);
-    g.addArc(0, 0, 1);
-    CHECK_THROWS(forwardScore(g));
-  }
-
-  {
-    // Throws on internal self-loop
-    Graph g;
-    g.addNode(true);
-    g.addNode();
-    g.addNode(false, true);
-    g.addArc(0, 1, 0);
-    g.addArc(1, 2, 0);
-    g.addArc(1, 1, 0);
-    CHECK_THROWS(forwardScore(g));
-  }
-
-  {
-    // Throws on self-loop in accept node
-    Graph g;
-    g.addNode(true);
-    g.addNode();
-    g.addNode(false, true);
-    g.addArc(0, 1, 0);
-    g.addArc(1, 2, 0);
-    g.addArc(2, 2, 0);
-    CHECK_THROWS(forwardScore(g));
-  }
-
-  {
-    // Throws on cycle
-    Graph g;
-    g.addNode(true);
-    g.addNode();
-    g.addNode(false, true);
-    g.addArc(0, 1, 0);
-    g.addArc(1, 2, 0);
-    g.addArc(2, 0, 0);
-    CHECK_THROWS(forwardScore(g));
-  }
-
-  {
     // Non-start node with no incoming arcs
     Graph g;
     g.addNode(true);

@@ -34,20 +34,14 @@ void shortestDistanceGrad(
     Graph& g,
     float output,
     const Graph& deltas,
+    const std::vector<int>& sortedNodes,
     const std::vector<float>& nodeScores,
     const std::vector<float>& maxScoresCache,
     const std::vector<size_t>& maxArcIdxCache,
     bool tropical) {
-  std::queue<int> computed;
-  std::vector<size_t> degrees(g.numNodes());
+
   std::vector<float> nodeGrads(g.numNodes(), 0.0);
   std::vector<float> arcGrads(g.numArcs(), 0.0);
-  for (auto n = 0; n < g.numNodes(); ++n) {
-    degrees[n] = g.numOut(n);
-    if (g.numOut(n) == 0) {
-      computed.push(n);
-    }
-  }
   float curScore = 0.0;
   float denom = tropical ? 0.0f : std::exp(output - maxScoresCache.back());
   for (auto n : g.accept()) {
@@ -61,9 +55,8 @@ void shortestDistanceGrad(
     nodeGrads[n] += curScore;
   }
 
-  while (!computed.empty()) {
-    auto n = computed.front();
-    computed.pop();
+  for (int i = sortedNodes.size() - 1; i >= 0; --i) {
+    auto n = sortedNodes[i];
     denom = tropical ? 0.0f : std::exp(nodeScores[n] - maxScoresCache[n]);
     for (const auto a : g.in(n)) {
       auto un = g.srcNode(a);
@@ -77,29 +70,44 @@ void shortestDistanceGrad(
       }
       nodeGrads[un] += curScore;
       arcGrads[a] = curScore * deltas.item();
-      if ((--degrees[un]) == 0) {
-        computed.push(un);
-      }
     }
   }
   g.addGrad(std::move(arcGrads));
 }
 
+std::vector<int> topSort(const Graph& g) {
+  std::vector<int> degrees(g.numNodes());
+  std::vector<int> sortedNodes(g.numNodes());
+  int start = 0;
+  int end = 0;
+  for (int n = 0; n < g.numNodes(); ++n) {
+    degrees[n] = g.numIn(n);
+    if (degrees[n] == 0) {
+      sortedNodes[end++] = n;
+    }
+  }
+  while (start < g.numNodes()) {
+    int oldEnd = end;
+    while (start < oldEnd) {
+      for (auto a : g.out(sortedNodes[start++])) {
+        auto dst = g.dstNode(a);
+        if (--degrees[dst] == 0) {
+          sortedNodes[end++] = dst;
+        }
+      }
+    }
+  }
+  return sortedNodes;
+}
+
 } // namespace
 
 Graph shortestDistance(const Graph& g, bool tropical /* = false */) {
-  std::queue<int> computed;
-  // List of scores and list of in degrees for each node
+  // List of scores for each node
   std::vector<float> scores(g.numNodes());
   std::vector<float> maxScoresCache(g.numNodes() + 1, kNegInf);
   std::vector<size_t> maxArcIdxCache(g.numNodes() + 1, -1);
-  std::vector<size_t> degrees(g.numNodes());
-  for (size_t n = 0; n < g.numNodes(); ++n) {
-    degrees[n] = g.numIn(n);
-    if (g.numIn(n) == 0) {
-      computed.push(n);
-    }
-  }
+  auto sortedNodes = topSort(g);
 
   auto getScore = [tropical](const std::vector<float>& in, float maxScore) {
     if (in.empty()) {
@@ -117,9 +125,7 @@ Graph shortestDistance(const Graph& g, bool tropical /* = false */) {
 
   std::vector<float> inScores;
   float maxScore = kNegInf;
-  while (!computed.empty()) {
-    auto n = computed.front();
-    computed.pop();
+  for (auto n : sortedNodes) {
     for (auto a : g.in(n)) {
       auto un = g.srcNode(a);
       inScores.push_back(scores[un] + g.weight(a));
@@ -138,20 +144,10 @@ Graph shortestDistance(const Graph& g, bool tropical /* = false */) {
     scores[n] = getScore(inScores, maxScoresCache[n]);
     inScores.clear();
     maxScore = kNegInf;
-    for (auto a : g.out(n)) {
-      auto dn = g.dstNode(a);
-      if ((--degrees[dn]) == 0) {
-        computed.push(dn);
-      }
-    }
   }
 
   // Accumulate scores at all the accept nodes.
   for (auto n : g.accept()) {
-    if (degrees[n] > 0) {
-      throw std::invalid_argument(
-          "Graph has a cycle, self-loop or is disconnected!");
-    }
     inScores.push_back(scores[n]);
     if (inScores.back() > maxScoresCache.back()) {
       maxScoresCache.back() = std::max(maxScoresCache.back(), inScores.back());
@@ -168,6 +164,7 @@ Graph shortestDistance(const Graph& g, bool tropical /* = false */) {
   }
 
   auto gradFunc = [scores = std::move(scores),
+                   sortedNodes = std::move(sortedNodes),
                    maxScoresCache = std::move(maxScoresCache),
                    maxArcIdxCache = std::move(maxArcIdxCache),
                    output = score,
@@ -176,6 +173,7 @@ Graph shortestDistance(const Graph& g, bool tropical /* = false */) {
         inputs[0],
         output,
         deltas,
+        sortedNodes,
         scores,
         maxScoresCache,
         maxArcIdxCache,
