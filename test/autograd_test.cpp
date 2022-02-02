@@ -353,8 +353,8 @@ TEST_CASE("test forward score grad", "[autograd]") {
     backward(forwardScore(g));
 
     auto& grad = g.grad();
-    CHECK(std::isnan(grad.weight(0)));
-    CHECK(std::isnan(grad.weight(1)));
+    CHECK(grad.weight(0) == 0.0);
+    CHECK(grad.weight(1) == 0.0);
 
     Graph g2;
     g2.addNode(true);
