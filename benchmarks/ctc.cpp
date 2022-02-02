@@ -12,6 +12,7 @@
 #include "gtn/gtn.h"
 
 using namespace gtn;
+using namespace gtn::criterion;
 
 float randScore() {
   auto uni = static_cast<float>(std::rand());
@@ -79,29 +80,27 @@ Graph transitionsGraph(int M, int N) {
   return graph;
 }
 
-void timeCtc() {
+void timeCtc(Device device = Device::CPU) {
   const int T = 1000; // input frames
   const int U = 100; // output tokens
   const int M = 28; // size of alphabet
 
-  Graph ctc = ctcGraph(randTarget(U, M));
+  auto target = randTarget(U, M);
   Graph emissions = linearGraph(T, M);
-  emissions.arcSort();
   emissions.setWeights(randVec(T * M).data());
+  emissions = emissions.to(device);
 
-  auto ctcLoss = [&ctc, &emissions]() {
-    auto loss = subtract(
-        forwardScore(emissions), forwardScore(intersect(ctc, emissions)));
+  auto ctc = [&target, &emissions]() {
+    auto loss = ctcLoss(emissions, target, 0);
     return loss;
   };
-  TIME(ctcLoss);
+  TIME_DEVICE(ctc, device);
 
-  auto ctcGrad = [loss = ctcLoss(), &emissions, &ctc]() {
+  auto ctcGrad = [loss = ctcLoss(emissions, target, 0), &emissions]() {
     emissions.zeroGrad();
-    ctc.zeroGrad();
     backward(loss, true);
   };
-  TIME(ctcGrad);
+  TIME_DEVICE(ctcGrad, device);
 }
 
 void timeNgramCtc() {
@@ -174,10 +173,12 @@ int main(int argc, char** argv) {
    */
   timeCtc();
   timeNgramCtc();
-
   int B = 8; // batch size
   if (argc > 1) {
     B = std::stoi(argv[1]);
   }
   timeBatchedCtc(B);
+  if (cuda::isAvailable()) {
+    timeCtc(Device::CUDA);
+  }
 }

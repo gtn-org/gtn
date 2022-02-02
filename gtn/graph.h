@@ -86,7 +86,6 @@ class Graph {
     // One value per node - i-th value corresponds to i-th node
     // Last element is the total number of arcs, so that
     // each element and its neighbor forms a range
-    // TODO initialize these ?
     detail::HDSpan<int> inArcOffset{device};
     detail::HDSpan<int> outArcOffset{device};
 
@@ -105,6 +104,8 @@ class Graph {
     bool ilabelSorted{false};
     bool olabelSorted{false};
     bool compiled{device.isCuda()};
+    bool topSorted{false};
+//    int medianWidth{0};
 
     void free() {
       startIds.clear();
@@ -215,6 +216,20 @@ class Graph {
    * efficiency of the algorithm.
    */
   void arcSort(bool olabel = false);
+
+  /**
+   * Topologically sorts an acyclic graph.
+   *
+   * Topologically sorts the graph such that the source node always has a lower
+   * integer id than the destination node. The behavior is undefined if the
+   * graph has a cycle.
+   *
+   * The function is generally safe to call between graph operations as it
+   * preserves the graph arc order for gradient computation.
+   *
+   * The function is not thread safe.
+   */
+  void topSort();
 
   /**
    * Mark a graph's arcs as sorted.

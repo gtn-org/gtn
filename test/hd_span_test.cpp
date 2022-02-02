@@ -43,6 +43,14 @@ TEST_CASE("test hd_span", "[hd_span]") {
     CHECK(sCopy[0] == 1);
     CHECK(sCopy[1] == 2);
     CHECK(sCopy[2] == 3);
+
+    s.reserve(8);
+    CHECK(s[0] == 1);
+    CHECK(s[1] == 2);
+    CHECK(s[2] == 3);
+    CHECK(s.capacity() >= 8);
+    s.reserve(2);
+    CHECK(s.capacity() >= s.size());
   }
 
   // Check resizing works
@@ -138,6 +146,36 @@ TEST_CASE("test hd_span", "[hd_span]") {
     h2[0] = 1;
     h2[1] = 3;
     CHECK(h1 != h2);
+  }
+
+  // Check copy and move construction
+  {
+    HDSpan<int> h1(2, 1);
+    HDSpan<int> h2(h1);
+    CHECK(h1.data() == h2.data());
+    CHECK(h1.size() == h2.size());
+    CHECK(h1.capacity() == h2.capacity());
+
+    HDSpan<int> h3(std::move(h1));
+    CHECK(h3.data() == h2.data());
+    // Should be a no-op
+    h1.clear();
+    CHECK(h3[0] == 1);
+  }
+
+  {
+    HDSpan<int> h1(2, 1);
+    HDSpan<int> h2(h1);
+
+    HDSpan<int> h3;
+    h3 = std::move(h1);
+    CHECK(h3.data() == h2.data());
+    CHECK(h3.size() == h2.size());
+    CHECK(h3.capacity() == h2.capacity());
+
+    // Should be a no-op
+    h1.clear();
+    CHECK(h3[0] == 1);
   }
 
   // Test swap

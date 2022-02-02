@@ -320,7 +320,7 @@ TEST_CASE("test gradient functionality", "[graph]") {
   }
 }
 
-TEST_CASE("test sort", "[graph]") {
+TEST_CASE("test arc sort", "[graph]") {
   // sort on empty graph does nothing
   Graph g;
   g.arcSort();
@@ -370,6 +370,52 @@ TEST_CASE("test sort", "[graph]") {
 
   g.markArcSorted(true);
   CHECK(g.olabelSorted());
+}
+
+TEST_CASE("test topological sort", "[graph]") {
+  // Sort on empty graph does nothing
+  {
+    Graph g;
+    g.topSort();
+  }
+
+  // Simple test case
+  {
+    Graph g;
+    g.addNode(false, true);
+    g.addNode();
+    g.addNode(true);
+    g.addArc(2, 1, 0);
+    g.addArc(1, 0, 1);
+    g.topSort();
+    CHECK(g.label(g.out(0, 0)) == 0);
+    CHECK(g.label(g.out(1, 0)) == 1);
+    CHECK(g.label(g.in(1, 0)) == 0);
+    CHECK(g.label(g.in(2, 0)) == 1);
+  }
+
+  {
+    Graph g;
+    g.addNode();
+    g.addNode();
+    g.addNode();
+    g.addNode();
+    // 2 -> 1, 3 -> 0
+    for (int i = 0; i < 5; i++) {
+      g.addArc(2, 1, i);
+      g.addArc(2, 3, i);
+    }
+    for (int i = 0; i < 7; i++) {
+      g.addArc(1, 0, i);
+      g.addArc(3, 0, i);
+    }
+    g.topSort();
+    bool sorted = true;
+    for (int a = 0; a < g.numArcs(); ++a) {
+      sorted &= g.srcNode(a) < g.dstNode(a);
+    }
+    CHECK(sorted);
+  }
 }
 
 TEST_CASE("test threaded grad", "[graph]") {
