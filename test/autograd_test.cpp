@@ -274,6 +274,16 @@ TEST_CASE("test forward score grad", "[autograd]") {
     CHECK(grad.weight(0) == Approx(denom * std::exp(-3)));
     CHECK(grad.weight(1) == Approx(denom * std::exp(1)));
     CHECK(grad.weight(2) == Approx(denom * (std::exp(-3) + std::exp(2))));
+
+    // With delta
+    g.zeroGrad();
+    float delta = 0.5;
+    auto deltaG = scalarGraph(delta);
+    backward(forwardScore(g), deltaG);
+    grad = g.grad();
+    CHECK(grad.weight(0) == Approx(delta * denom * std::exp(-3)));
+    CHECK(grad.weight(1) == Approx(delta * denom * std::exp(1)));
+    CHECK(grad.weight(2) == Approx(delta * denom * (std::exp(-3) + std::exp(2))));
   }
 
   {
@@ -485,7 +495,7 @@ TEST_CASE("test viterbi score grad", "[autograd]") {
   }
 }
 
-TEST_CASE("Test viterbiPath grad", "[autograd]") {
+TEST_CASE("test viterbi path grad", "[autograd]") {
   auto gradsToVec = [](Graph g) {
     std::vector<float> grads;
     for (auto a = 0; a < g.numArcs(); ++a) {
