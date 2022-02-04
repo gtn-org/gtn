@@ -70,25 +70,23 @@ void shortestDistanceGrad(
 }
 
 std::vector<int> topSort(const Graph& g) {
-  std::stack<std::tuple<int, int, int>> nodeStack;
+  std::stack<std::pair<int, int>> nodeStack;
   std::vector<bool> visited(g.numNodes(), false);
   std::vector<int> sortedNodes(g.numNodes());
 
   int numVisited = 0;
   for (int n = 0; n < g.numNodes(); ++n) {
     if (g.numIn(n) == 0) {
-      nodeStack.emplace(n, 0, 0);
+      nodeStack.emplace(n, 0);
       visited[n] = true;
       numVisited++;
     }
   }
 
-  int diameter = 0;
   int nodeIdx = g.numNodes() - 1;
   while (!nodeStack.empty()) {
-    int n, a, d;
-    std::tie(n, a, d) = nodeStack.top();
-    diameter = std::max(diameter, d);
+    int n, a;
+    std::tie(n, a) = nodeStack.top();
     nodeStack.pop();
 
     // Stop early if all the nodes have been visited already
@@ -101,8 +99,8 @@ std::vector<int> topSort(const Graph& g) {
     for (; it < g.out(n).end(); it++) {
       auto dst = g.dstNode(*it);
       if (!visited[dst]) {
-        nodeStack.emplace(n, it - g.out(n).begin(), d);
-        nodeStack.emplace(dst, 0, d + 1);
+        nodeStack.emplace(n, it - g.out(n).begin());
+        nodeStack.emplace(dst, 0);
         visited[dst] = true;
         numVisited++;
         break;
