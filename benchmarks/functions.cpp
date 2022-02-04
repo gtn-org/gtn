@@ -101,6 +101,37 @@ void timeForward(Device device = Device::CPU) {
   TIME_DEVICE(forwardScoreRandDAGBackward, device);
 }
 
+void timeViterbiPath(Device device = Device::CPU) {
+  auto graph = linearGraph(100, 20000);
+  std::vector<float> weights(graph.numArcs());
+  std::generate(weights.begin(), weights.end(), std::rand);
+  graph.setWeights(weights.data());
+  graph = graph.to(device);
+
+  auto viterbiPathLinearForward = [&graph]() {
+    auto out = viterbiPath(graph);
+  };
+  TIME_DEVICE(viterbiPathLinearForward, device);
+
+  auto viterbiPathLinearBackward = [&graph, out = viterbiPath(graph)] {
+    graph.zeroGrad();
+    backward(out, true);
+  };
+  TIME_DEVICE(viterbiPathLinearBackward, device);
+
+  graph = makeRandomDAG(500, 400000).to(device);
+  auto viterbiPathRandDAGForward = [&graph]() {
+    auto out = viterbiPath(graph);
+  };
+  TIME_DEVICE(viterbiPathRandDAGForward, device);
+
+  auto viterbiPathRandDAGBackward = [&graph, out = viterbiPath(graph)] {
+    graph.zeroGrad();
+    backward(out, true);
+  };
+  TIME_DEVICE(viterbiPathRandDAGBackward, device);
+}
+
 void timeCompose(Device device = Device::CPU) {
   const int N1 = 100;
   const int N2 = 50;
@@ -143,6 +174,7 @@ int main() {
   /* Various function benchmarks. */
   timeSimpleOps();
   timeForward();
+  timeViterbiPath();
   timeCompose();
   if (cuda::isAvailable()) {
     timeSimpleOps(Device::CUDA);
