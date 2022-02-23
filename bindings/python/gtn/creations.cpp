@@ -15,7 +15,7 @@ using namespace gtn;
 namespace py = pybind11;
 using namespace py::literals;
 
-PYBIND11_MODULE(_creations, m) {
+PYBIND11_MODULE(creations, m) {
   m.def(
       "scalar_graph",
       [](float weight, Device device, bool calcGrad) {

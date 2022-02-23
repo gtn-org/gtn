@@ -15,7 +15,7 @@ using namespace gtn;
 namespace py = pybind11;
 using namespace py::literals;
 
-PYBIND11_MODULE(_functions, m) {
+PYBIND11_MODULE(functions, m) {
   m.def(
       "add",
       [](const Graph& g1, const Graph& g2) {

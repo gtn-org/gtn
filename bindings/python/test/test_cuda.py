@@ -32,7 +32,7 @@ class CudaTestCase(unittest.TestCase):
       self.assertEqual(gdev.num_arcs(), g.num_arcs())
       self.assertTrue(gdev.is_cuda())
       self.assertEqual(gdev.item(), 0.5)
-      # self.assertRaises(ValueError, gdev.arc_sort)
+      self.assertRaises(ValueError, gdev.arc_sort)
 
       if gtn.cuda.device_count() > 1:
         gpu1 = gtn.Device(gtn.CUDA, 1) 
