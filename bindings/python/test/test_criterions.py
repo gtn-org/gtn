@@ -10,7 +10,6 @@ import unittest
 import gtn
 import gtn.criterion
 
-
 def emissions_graph(emissions_vec, T, N, logprobs=False):
     if not logprobs:
         emissions_vec = [-math.inf if e == 0 else math.log(e) for e in emissions_vec]

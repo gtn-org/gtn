@@ -15,7 +15,7 @@ using namespace gtn;
 namespace py = pybind11;
 using namespace py::literals;
 
-PYBIND11_MODULE(_rand, m) {
+PYBIND11_MODULE(rand, m) {
   m.def(
       "sample",
       [](const Graph& graph, size_t maxLength) {

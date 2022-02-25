@@ -15,7 +15,7 @@ using namespace gtn;
 namespace py = pybind11;
 using namespace py::literals;
 
-PYBIND11_MODULE(_utils, m) {
+PYBIND11_MODULE(utils, m) {
   m.def("equal", equal, "g1"_a, "g2"_a);
   m.def("isomorphic", isomorphic, "g1"_a, "g2"_a);
   m.def(

@@ -9,7 +9,7 @@ using namespace gtn;
 namespace py = pybind11;
 using namespace py::literals;
 
-PYBIND11_MODULE(_device, m) {
+PYBIND11_MODULE(device, m) {
   py::enum_<DeviceType>(m, "DeviceType")
     .value("CPU", DeviceType::CPU)
     .value("CUDA", DeviceType::CUDA);
