@@ -16,7 +16,7 @@ import sys
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
-__version__ = "0.0.0"
+__version__ = "0.0.1"
 
 # Long description from README.md:
 def load_readme():
