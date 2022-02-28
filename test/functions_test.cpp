@@ -235,68 +235,39 @@ TEST_CASE("test composition", "[functions]") {
 }
 
 TEST_CASE("test forward score", "[functions]") {
+
+  const float inf = std::numeric_limits<float>::infinity();
+
   {
     // Check score of empty graph
     Graph g;
-    CHECK(forwardScore(g).item() == -std::numeric_limits<float>::infinity());
+    CHECK(forwardScore(g).item() == -inf);
   }
 
   {
-    // Throws on self-loops
-    Graph g;
-    g.addNode(true, true);
-    g.addArc(0, 0, 1);
-    CHECK_THROWS(forwardScore(g));
-  }
-
-  {
-    // Throws on internal self-loop
+    // Non-start node with no incoming arcs
     Graph g;
     g.addNode(true);
+    g.addNode();
+    g.addNode(false, true);
+    g.addArc(1, 2, 0);
+    CHECK(forwardScore(g).item() == -inf);
+    g.addArc(0, 2, 0, 0, 1.0);
+    CHECK(forwardScore(g).item() == Approx(1.0));
+  }
+
+  {
+    // Disconnected graph
+    Graph g;
+    g.addNode(true);
+    g.addNode();
     g.addNode();
     g.addNode(false, true);
     g.addArc(0, 1, 0);
-    g.addArc(1, 2, 0);
-    g.addArc(1, 1, 0);
-    CHECK_THROWS(forwardScore(g));
+    g.addArc(2, 3, 0);
+    CHECK(forwardScore(g).item() == -inf);
   }
 
-  {
-    // Throws on self-loop in accept node
-    Graph g;
-    g.addNode(true);
-    g.addNode();
-    g.addNode(false, true);
-    g.addArc(0, 1, 0);
-    g.addArc(1, 2, 0);
-    g.addArc(2, 2, 0);
-    CHECK_THROWS(forwardScore(g));
-  }
-
-  {
-    // Throws on cycle
-    Graph g;
-    g.addNode(true);
-    g.addNode();
-    g.addNode(false, true);
-    g.addArc(0, 1, 0);
-    g.addArc(1, 2, 0);
-    g.addArc(2, 0, 0);
-    CHECK_THROWS(forwardScore(g));
-  }
-
-  {
-    // Throws if a non-start node has no incoming arcs
-    Graph g;
-    g.addNode(true);
-    g.addNode();
-    g.addNode(false, true);
-    g.addArc(0, 2, 0);
-    g.addArc(1, 2, 0);
-    CHECK_THROWS(forwardScore(g));
-  }
-
-  const float inf = std::numeric_limits<float>::infinity();
   {
     // Handles negative infinity
     Graph g;

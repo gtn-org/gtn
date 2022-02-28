@@ -97,6 +97,24 @@ class HDSpan {
     : device_(device) {};
 
   HDTAG
+  HDSpan(const HDSpan<T>& other) :
+    capacity_(other.capacity()),
+    size_(other.size()),
+    data_(other.data_),
+    device_(other.device()) { };
+
+  HDTAG
+  HDSpan(HDSpan<T>&& other) :
+    capacity_(other.capacity()),
+    size_(other.size()),
+    data_(other.data_),
+    device_(other.device()) {
+      other.size_ = 0;
+      other.capacity_ = 0;
+      other.data_ = nullptr;
+  };
+
+  HDTAG
   const T operator[](size_t idx) const {
     return data_[idx];
   };
@@ -125,6 +143,21 @@ class HDSpan {
     return *this;
   };
 
+  HDSpan& operator=(HDSpan&& other) {
+    if (this->data_ == other.data_) {
+      return *this;
+    }
+    size_ = other.size();
+    capacity_ = other.capacity();
+    free();
+    data_ = other.data();
+    device_ = other.device();
+    other.size_ = 0;
+    other.capacity_ = 0;
+    other.data_ = nullptr;
+    return *this;
+  };
+
   void resize(size_t size, T val) {
     // Smaller or same size is a no-op with capacity_ unchanged.
     auto os = size_;
@@ -147,6 +180,16 @@ class HDSpan {
     capacity_ = size;
     auto newData = allocAndCopy(data_);
     size_ = size;
+    free();
+    data_ = newData;
+  };
+
+  void reserve(size_t size) {
+    if (size <= capacity_) {
+      return;
+    }
+    capacity_ = size;
+    auto newData = allocAndCopy(data_);
     free();
     data_ = newData;
   };
@@ -196,6 +239,11 @@ class HDSpan {
   };
 
   HDTAG
+  size_t capacity() const {
+    return capacity_;
+  };
+
+  HDTAG
   size_t size() const {
     return size_;
   };
@@ -204,6 +252,7 @@ class HDSpan {
     return device_.isCuda();
   };
 
+  HDTAG
   Device device() const {
     return device_;
   };

@@ -86,7 +86,6 @@ class Graph {
     // One value per node - i-th value corresponds to i-th node
     // Last element is the total number of arcs, so that
     // each element and its neighbor forms a range
-    // TODO initialize these ?
     detail::HDSpan<int> inArcOffset{device};
     detail::HDSpan<int> outArcOffset{device};
 

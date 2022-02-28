@@ -223,7 +223,7 @@ void Graph::addGrad(const Graph& other) {
   if (device() != other.device()) {
     throw std::invalid_argument("[Graph::addGrad] device mismach");
   }
-  if (calcGrad() & other.numArcs() != numArcs()) {
+  if (calcGrad() && other.numArcs() != numArcs()) {
     throw std::logic_error("[Graph::addGrad] Invalid grad size.");
   }
   addGrad(other.weights());

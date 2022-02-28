@@ -320,7 +320,7 @@ TEST_CASE("test gradient functionality", "[graph]") {
   }
 }
 
-TEST_CASE("test sort", "[graph]") {
+TEST_CASE("test arc sort", "[graph]") {
   // sort on empty graph does nothing
   Graph g;
   g.arcSort();

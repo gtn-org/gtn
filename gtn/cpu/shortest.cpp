@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <queue>
+#include <stack>
 
 #include "gtn/cpu/shortest.h"
 
@@ -34,70 +34,91 @@ void shortestDistanceGrad(
     Graph& g,
     float output,
     const Graph& deltas,
+    const std::vector<int>& sortedNodes,
     const std::vector<float>& nodeScores,
-    const std::vector<float>& maxScoresCache,
     const std::vector<size_t>& maxArcIdxCache,
     bool tropical) {
-  std::queue<int> computed;
-  std::vector<size_t> degrees(g.numNodes());
+
   std::vector<float> nodeGrads(g.numNodes(), 0.0);
   std::vector<float> arcGrads(g.numArcs(), 0.0);
-  for (auto n = 0; n < g.numNodes(); ++n) {
-    degrees[n] = g.numOut(n);
-  }
-  float curScore = 0.0;
-  float denom = tropical ? 0.0f : std::exp(output - maxScoresCache.back());
-  for (auto n : g.accept()) {
-    if (g.numOut(n) == 0) {
-      computed.push(n);
-    }
-    if (tropical) {
-      curScore = (n == maxArcIdxCache.back()) ? 1.0f : 0.0f;
-    } else {
-      curScore = std::exp(nodeScores[n] - maxScoresCache.back()) / denom;
-    }
-    nodeGrads[n] += curScore;
-  }
 
-  while (!computed.empty()) {
-    auto n = computed.front();
-    computed.pop();
-    denom = tropical ? 0.0f : std::exp(nodeScores[n] - maxScoresCache[n]);
-    for (const auto a : g.in(n)) {
-      auto un = g.srcNode(a);
+  for (int i = sortedNodes.size() - 1; i >= 0; --i) {
+    auto n = sortedNodes[i];
+    for (const auto a : g.out(n)) {
+      auto dn = g.dstNode(a);
+      float curScore;
       if (tropical) {
-        curScore = (a == maxArcIdxCache[n]) ? nodeGrads[n] : 0.0f;
+        curScore = (a == maxArcIdxCache[dn]) ? nodeGrads[dn] : 0.0f;
+      } else if (nodeScores[dn] == kNegInf) {
+        curScore = 0.0f;
       } else {
-        curScore = nodeGrads[n] *
-            std::exp(nodeScores[un] + g.weight(a) - maxScoresCache[n]) / denom;
+        curScore = nodeGrads[dn] *
+            std::exp(nodeScores[n] + g.weight(a) - nodeScores[dn]);
       }
-      nodeGrads[un] += curScore;
-      arcGrads[a] = curScore * deltas.item();
-      if ((--degrees[un]) == 0) {
-        computed.push(un);
+      nodeGrads[n] += curScore;
+      arcGrads[a] = curScore;
+    }
+    if (g.isAccept(n)) {
+      if (tropical) {
+        nodeGrads[n] += (n == maxArcIdxCache.back()) ? deltas.item() : 0.0f;
+      } else if (nodeScores.back() != kNegInf) {
+        nodeGrads[n] += std::exp(nodeScores[n] - output) * deltas.item();
       }
     }
   }
   g.addGrad(std::move(arcGrads));
 }
 
+std::vector<int> topSort(const Graph& g) {
+  std::stack<std::pair<int, int>> nodeStack;
+  std::vector<bool> visited(g.numNodes(), false);
+  std::vector<int> sortedNodes(g.numNodes());
+
+  int numVisited = 0;
+  for (int n = 0; n < g.numNodes(); ++n) {
+    if (g.numIn(n) == 0) {
+      nodeStack.emplace(n, 0);
+      visited[n] = true;
+      numVisited++;
+    }
+  }
+
+  int nodeIdx = g.numNodes() - 1;
+  while (!nodeStack.empty()) {
+    int n, a;
+    std::tie(n, a) = nodeStack.top();
+    nodeStack.pop();
+
+    // Stop early if all the nodes have been visited already
+    if (numVisited == g.numNodes()) {
+      sortedNodes[nodeIdx--] = n;
+      continue;
+    }
+
+    auto it = g.out(n).begin() + a;
+    for (; it < g.out(n).end(); it++) {
+      auto dst = g.dstNode(*it);
+      if (!visited[dst]) {
+        nodeStack.emplace(n, it - g.out(n).begin());
+        nodeStack.emplace(dst, 0);
+        visited[dst] = true;
+        numVisited++;
+        break;
+      }
+    }
+    if (it == g.out(n).end()) {
+      sortedNodes[nodeIdx--] = n;
+    }
+  }
+  return sortedNodes;
+}
+
 } // namespace
 
 Graph shortestDistance(const Graph& g, bool tropical /* = false */) {
-  std::queue<int> computed;
-  // List of scores and list of in degrees for each node
   std::vector<float> scores(g.numNodes());
-  std::vector<float> maxScoresCache(g.numNodes() + 1, kNegInf);
   std::vector<size_t> maxArcIdxCache(g.numNodes() + 1, -1);
-  std::vector<size_t> degrees(g.numNodes());
-  for (size_t n = 0; n < g.numNodes(); ++n) {
-    degrees[n] = g.numIn(n);
-  }
-  for (auto n : g.start()) {
-    if (g.numIn(n) == 0) {
-      computed.push(n);
-    }
-  }
+  auto sortedNodes = topSort(g);
 
   auto getScore = [tropical](const std::vector<float>& in, float maxScore) {
     if (in.empty()) {
@@ -113,60 +134,48 @@ Graph shortestDistance(const Graph& g, bool tropical /* = false */) {
     return maxScore + std::log1p(score);
   };
 
-  std::vector<float> inScores;
-  float maxScore = kNegInf;
-  while (!computed.empty()) {
-    auto n = computed.front();
-    computed.pop();
+  for (auto n : sortedNodes) {
+    float maxScore = kNegInf;
+    std::vector<float> inScores(g.numIn(n) + g.isStart(n));
+    int i = 0;
     for (auto a : g.in(n)) {
       auto un = g.srcNode(a);
-      inScores.push_back(scores[un] + g.weight(a));
-      if (inScores.back() > maxScoresCache[n]) {
-        maxScoresCache[n] = inScores.back();
+      inScores[i] = scores[un] + g.weight(a);
+      if (inScores[i]  > maxScore) {
+        maxScore = inScores[i];
         maxArcIdxCache[n] = a;
       }
+      i++;
     }
     if (g.isStart(n)) {
-      inScores.push_back(0.0);
-      if (inScores.back() > maxScoresCache[n]) {
-        maxScoresCache[n] = inScores.back();
+      inScores[i] = 0.0;
+      if (inScores[i] > maxScore) {
+        maxScore = inScores[i];
         maxArcIdxCache[n] = -1; // an invalid value
       }
     }
-    scores[n] = getScore(inScores, maxScoresCache[n]);
-    inScores.clear();
-    maxScore = kNegInf;
-    for (auto a : g.out(n)) {
-      auto dn = g.dstNode(a);
-      if ((--degrees[dn]) == 0) {
-        computed.push(dn);
-      }
-    }
+    scores[n] = getScore(inScores, maxScore);
   }
 
   // Accumulate scores at all the accept nodes.
+  std::vector<float> inScores;
+  float maxScore = kNegInf;
   for (auto n : g.accept()) {
-    if (degrees[n] > 0) {
-      throw std::invalid_argument(
-          "Graph has a cycle, self-loop or is disconnected!");
-    }
     inScores.push_back(scores[n]);
-    if (inScores.back() > maxScoresCache.back()) {
-      maxScoresCache.back() = std::max(maxScoresCache.back(), inScores.back());
+    if (inScores.back() > maxScore) {
+      maxScore = inScores.back();
       maxArcIdxCache.back() = n; // NOTE: Using node idx (instead of arc idx)
     }
   }
-  auto score = getScore(inScores, maxScoresCache.back());
+  auto score = getScore(inScores, maxScore);
 
   // clear cache not required for bwd
-  if (tropical) {
-    maxScoresCache.clear();
-  } else {
+  if (!tropical) {
     maxArcIdxCache.clear();
   }
 
   auto gradFunc = [scores = std::move(scores),
-                   maxScoresCache = std::move(maxScoresCache),
+                   sortedNodes = std::move(sortedNodes),
                    maxArcIdxCache = std::move(maxArcIdxCache),
                    output = score,
                    tropical](std::vector<Graph>& inputs, Graph deltas) mutable {
@@ -174,8 +183,8 @@ Graph shortestDistance(const Graph& g, bool tropical /* = false */) {
         inputs[0],
         output,
         deltas,
+        sortedNodes,
         scores,
-        maxScoresCache,
         maxArcIdxCache,
         tropical);
   };
@@ -188,36 +197,23 @@ Graph shortestDistance(const Graph& g, bool tropical /* = false */) {
 }
 
 Graph shortestPath(const Graph& g) {
-  std::queue<int> computed;
-  // List of in degrees for each node
-  std::vector<size_t> degrees(g.numNodes());
   // List of scores and backpointers for each node
   std::vector<int> backPointers(g.numNodes());
   std::vector<float> scores(g.numNodes(), kNegInf);
-  for (size_t n = 0; n < g.numNodes(); ++n) {
-    degrees[n] = g.numIn(n);
-  }
+  auto sortedNodes = topSort(g);
+
   for (auto n : g.start()) {
     scores[n] = 0.0;
     backPointers[n] = -1;
-    if (g.numIn(n) == 0) {
-      computed.push(n);
-    }
   }
 
-  while (!computed.empty()) {
-    auto n = computed.front();
-    computed.pop();
-    auto score = scores[n];
-    for (auto a : g.out(n)) {
-      auto dn = g.dstNode(a);
-      auto nScore = score + g.weight(a);
-      if (nScore > scores[dn]) {
-        scores[dn] = nScore;
-        backPointers[dn] = a;
-      }
-      if ((--degrees[dn]) == 0) {
-        computed.push(dn);
+  for (auto n : sortedNodes) {
+    for (auto a : g.in(n)) {
+      auto un = g.srcNode(a);
+      auto nScore = scores[un] + g.weight(a);
+      if (nScore > scores[n]) {
+        scores[n] = nScore;
+        backPointers[n] = a;
       }
     }
   }
@@ -226,10 +222,6 @@ Graph shortestPath(const Graph& g) {
   float score = kNegInf;
   int best = -1;
   for (auto a : g.accept()) {
-    if (degrees[a] > 0) {
-      throw std::invalid_argument(
-          "Graph has a cycle, self-loop or is disconnected!");
-    }
     if (scores[a] > score) {
       score = scores[a];
       best = a;

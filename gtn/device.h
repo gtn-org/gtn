@@ -12,8 +12,8 @@ struct Device {
 
   Device(DeviceType type, int index);
   Device(DeviceType type);
-  const DeviceType type;
-  const int index;
+  DeviceType type;
+  int index;
   bool isCuda() const {
     return type == CUDA;
   };

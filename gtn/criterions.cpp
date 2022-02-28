@@ -35,10 +35,7 @@ Graph ctcLoss(
       gLabel.addArc(l - 2, l, label);
     }
   }
-  // gLabel.arcSort(false);
-  if (logProbs.isCuda()) {
-    gLabel.cuda(logProbs.device()); 
-  }
+  gLabel = gLabel.to(logProbs.device());
   return negate(forwardScore(intersect(gLabel, logProbs)));
 }
 } // namespace criterion
