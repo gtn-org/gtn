@@ -16,7 +16,7 @@ using namespace gtn::criterion;
 namespace py = pybind11;
 using namespace py::literals;
 
-PYBIND11_MODULE(_criterions, m) {
+PYBIND11_MODULE(criterion, m) {
   m.def(
       "ctc_loss",
       [](const Graph& logProbs, const std::vector<int>& target, int blankIdx) {

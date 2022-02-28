@@ -15,7 +15,7 @@ using namespace gtn;
 namespace py = pybind11;
 using namespace py::literals;
 
-PYBIND11_MODULE(_autograd, m) {
+PYBIND11_MODULE(autograd, m) {
   m.def(
       "backward",
       [](Graph g, bool retainGraph) {

@@ -16,7 +16,7 @@ using namespace gtn;
 namespace py = pybind11;
 using namespace py::literals;
 
-PYBIND11_MODULE(_parallel, m) {
+PYBIND11_MODULE(parallel, m) {
   m.def(
       "parallel_for",
       [](const std::function<void(int)>& function,

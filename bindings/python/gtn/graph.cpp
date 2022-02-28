@@ -19,7 +19,7 @@ using namespace gtn;
 namespace py = pybind11;
 using namespace py::literals;
 
-PYBIND11_MODULE(_graph, m) {
+PYBIND11_MODULE(graph, m) {
   py::class_<Graph>(m, "Graph")
       .def(py::init<bool>(), "calc_grad"_a = true)
       .def(
