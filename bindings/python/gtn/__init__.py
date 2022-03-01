@@ -9,15 +9,15 @@ import os
 import subprocess
 import tempfile
 
-from ._graph import *
-from ._graph import __version__
-from ._device import *
-from ._functions import *
-from ._autograd import *
-from ._creations import *
-from ._utils import *
-from ._rand import *
-from ._parallel import *
+from .graph import *
+from .graph import __version__
+from .device import *
+from .functions import *
+from .autograd import *
+from .creations import *
+from .utils import *
+from .rand import *
+from .parallel import *
 from . import cuda
 
 def draw(graph, file_name, isymbols={}, osymbols={}):
