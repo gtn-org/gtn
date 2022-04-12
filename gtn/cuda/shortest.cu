@@ -16,8 +16,8 @@ namespace{
 
 typedef Graph::SharedGraph GraphData;
 
-__constant__ constexpr float kInf = std::numeric_limits<float>::infinity();
-__constant__ constexpr float kNegInf = -std::numeric_limits<float>::infinity();
+__constant__ float kInf = std::numeric_limits<float>::infinity();
+__constant__ float kNegInf = -std::numeric_limits<float>::infinity();
 constexpr int kNT = 128;
 
 typedef union {
@@ -350,7 +350,10 @@ Graph shortestDistance(const Graph& g, bool tropical) {
   HDSpan<int> numToExplore(1, 0, Device::CUDA);
 
   thrust::fill(
-      thrust::device, maxes.begin(), maxes.end(), ArgMaxT{kNegInf, -1});
+      thrust::device,
+      maxes.begin(),
+      maxes.end(),
+      ArgMaxT{-std::numeric_limits<float>::infinity(), -1});
 
   initExplore(
       gData.start, gData.inArcOffset, degrees, currExplore, numToExplore);
